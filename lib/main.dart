@@ -1,0 +1,159 @@
+import 'package:flutter/material.dart';
+import 'package:clip_sync/sync/sync_manager.dart';
+import 'package:clip_sync/clipboard/clipboard_service.dart';
+import 'package:clip_sync/android/android_manager.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
+  runApp(const ClipSyncApp());
+}
+
+class ClipSyncApp extends StatelessWidget {
+  const ClipSyncApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'ClipSync',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        brightness: Brightness.dark,
+        useMaterial3: true,
+      ),
+      home: const HomePage(),
+    );
+  }
+}
+
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final SyncManager _syncManager = SyncManager();
+  final ClipboardService _clipboardService = ClipboardService();
+  final AndroidManager _androidManager = AndroidManager();
+
+  String _lastSyncedText = 'Nothing synced yet';
+  bool _isInitializing = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    // 1. Initialize Networking
+    await _syncManager.initialize();
+
+    // 2. Initialize Desktop Clipboard Watcher (if applicable)
+    _clipboardService.initialize();
+    _clipboardService.onClipboardTextChanged = (text) {
+      _syncManager.broadcastClipboard(text);
+      _updateStatus('Copied from Desktop: $text');
+    };
+
+    // 3. Initialize Android Manager (if applicable)
+    await _androidManager.initialize();
+    _androidManager.onShareReceived = (text) {
+      _syncManager.broadcastClipboard(text);
+      _updateStatus('Shared via Android: $text');
+    };
+    _androidManager.onSyncAction = () async {
+      final text = await _clipboardService.getClipboardText();
+      if (text != null && text.isNotEmpty) {
+        _syncManager.broadcastClipboard(text);
+        _updateStatus('Manual Sync: $text');
+      }
+    };
+
+    // 4. Listen for incoming clipboard text
+    _syncManager.onClipboardReceived.listen((text) {
+      _clipboardService.setClipboardText(text);
+      _updateStatus('Received: $text');
+    });
+
+    setState(() {
+      _isInitializing = false;
+    });
+  }
+
+  void _updateStatus(String text) {
+    if (mounted) {
+      setState(() {
+        _lastSyncedText = text;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _syncManager.dispose();
+    _clipboardService.dispose();
+    _androidManager.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ClipSync'),
+      ),
+      body: Center(
+        child: _isInitializing
+            ? const CircularProgressIndicator()
+            : Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.sync,
+                      size: 64,
+                      color: Colors.blueAccent,
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Ready to sync clipboard across devices.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 18),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Last activity:\n$_lastSyncedText',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 32),
+                    if (!kIsWeb && Platform.isAndroid)
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final text = await _clipboardService.getClipboardText();
+                          if (text != null && text.isNotEmpty) {
+                            _syncManager.broadcastClipboard(text);
+                            _updateStatus('Manual Push: $text');
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Clipboard Pushed to peers')),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.send),
+                        label: const Text('Push Current Clipboard'),
+                      ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+}
