@@ -66,10 +66,7 @@ Whenever a device copies text, the payload undergoes the following transformatio
 }
 ```
 
-### 2.3 Defense Mechanisms
-* **Anti-Replay Attacks:** Because GCM uses a unique, single-use nonce for every single payload, two identical clipboard copies will result in entirely different ciphertexts.
-* **Intrusion Rejection:** If a rogue device connects to the WebSocket port, the system immediately demands a valid encrypted `hello` handshake. Without the `SECRET_KEY`, the rogue device cannot produce a valid payload. The ClipSync node will silently drop all unauthenticated packets, immune to malicious input.
-* **No Hardcoded Secrets:** The system utilizes `python-dotenv` and `flutter_dotenv` to strictly load keys at runtime, preventing accidental leaks in source code repositories.
+
 
 ---
 
