@@ -123,14 +123,25 @@ class ClipSyncLinux:
     def update_service(self, zeroconf, type, name):
         pass
 
+    def get_local_ip(self):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
     def start_mDNS(self):
+        local_ip = self.get_local_ip()
         info = ServiceInfo(
             SERVICE_TYPE,
             f"ClipSync Linux-{DEVICE_ID[:4]}.{SERVICE_TYPE}",
-            addresses=[socket.inet_aton("127.0.0.1")],
+            addresses=[socket.inet_aton(local_ip)],
             port=self.port,
             properties={},
-            server=f"{socket.gethostname()}.local.",
+            server=f"{socket.gethostname().replace('.','')}.local.",
         )
         self.zeroconf.register_service(info)
         self.browser = ServiceBrowser(self.zeroconf, SERVICE_TYPE, self)
