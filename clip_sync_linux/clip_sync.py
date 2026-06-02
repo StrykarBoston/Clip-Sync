@@ -11,7 +11,7 @@ import base64
 
 import pyperclip
 import websockets
-from websockets.server import serve
+from websockets import serve
 from zeroconf import IPVersion, ServiceBrowser, ServiceInfo, Zeroconf
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag

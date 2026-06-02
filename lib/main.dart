@@ -52,35 +52,51 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _initialize() async {
-    // 1. Initialize Networking
-    await _syncManager.initialize();
+    try {
+      // 1. Initialize Networking
+      await _syncManager.initialize();
+    } catch (e) {
+      print("Sync Manager Error: $e");
+    }
 
-    // 2. Initialize Desktop Clipboard Watcher (if applicable)
-    _clipboardService.initialize();
-    _clipboardService.onClipboardTextChanged = (text) {
-      _syncManager.broadcastClipboard(text);
-      _updateStatus('Copied from Desktop: $text');
-    };
-
-    // 3. Initialize Android Manager (if applicable)
-    await _androidManager.initialize();
-    _androidManager.onShareReceived = (text) {
-      _syncManager.broadcastClipboard(text);
-      _updateStatus('Shared via Android: $text');
-    };
-    _androidManager.onSyncAction = () async {
-      final text = await _clipboardService.getClipboardText();
-      if (text != null && text.isNotEmpty) {
+    try {
+      // 2. Initialize Desktop Clipboard Watcher (if applicable)
+      _clipboardService.initialize();
+      _clipboardService.onClipboardTextChanged = (text) {
         _syncManager.broadcastClipboard(text);
-        _updateStatus('Manual Sync: $text');
-      }
-    };
+        _updateStatus('Copied from Desktop: $text');
+      };
+    } catch (e) {
+      print("Clipboard Service Error: $e");
+    }
 
-    // 4. Listen for incoming clipboard text
-    _syncManager.onClipboardReceived.listen((text) {
-      _clipboardService.setClipboardText(text);
-      _updateStatus('Received: $text');
-    });
+    try {
+      // 3. Initialize Android Manager (if applicable)
+      await _androidManager.initialize();
+      _androidManager.onShareReceived = (text) {
+        _syncManager.broadcastClipboard(text);
+        _updateStatus('Shared via Android: $text');
+      };
+      _androidManager.onSyncAction = () async {
+        final text = await _clipboardService.getClipboardText();
+        if (text != null && text.isNotEmpty) {
+          _syncManager.broadcastClipboard(text);
+          _updateStatus('Manual Sync: $text');
+        }
+      };
+    } catch (e) {
+      print("Android Manager Error: $e");
+    }
+
+    try {
+      // 4. Listen for incoming clipboard text
+      _syncManager.onClipboardReceived.listen((text) {
+        _clipboardService.setClipboardText(text);
+        _updateStatus('Received: $text');
+      });
+    } catch (e) {
+      print("Listener Error: $e");
+    }
 
     setState(() {
       _isInitializing = false;

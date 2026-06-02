@@ -21,9 +21,12 @@ class AndroidManager {
 
     // 1. Setup Notifications
     const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@mipmap/launcher_icon');
     const InitializationSettings initializationSettings =
         InitializationSettings(android: initializationSettingsAndroid);
+
+    await _notificationsPlugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
 
     await _notificationsPlugin.initialize(
       settings: initializationSettings,
