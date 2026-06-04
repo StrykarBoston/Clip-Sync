@@ -3,7 +3,7 @@
 ClipSync is a decentralized, cross-platform clipboard synchronization system designed to operate completely offline over Local Area Networks (LAN) and Wi-Fi. By bypassing cloud servers and external dependencies, ClipSync guarantees maximum privacy. This document outlines the cryptographic layers, network topology, and system architecture that powers ClipSync securely.
 
 ## 1. Network Topology: Decentralized P2P Mesh
-Unlike traditional client-server models, ClipSync utilizes a **Full Mesh Topology**. Every single device (Node) in the network acts as both a WebSocket Client and a WebSocket Server simultaneously. 
+Unlike traditional client-server models, ClipSync utilizes a **Full Mesh Topology**. Every single device (Node) in the network acts as both a Secure WebSocket Client and a Secure WebSocket Server simultaneously. 
 
 ### Architecture Diagram
 ```mermaid
@@ -14,15 +14,15 @@ graph TD
         A[Android Node<br/>Flutter App]
 
         %% Bi-directional WebSocket Tunnels
-        W <==>|Encrypted WS| L
-        L <==>|Encrypted WS| A
-        A <==>|Encrypted WS| W
+        W <==>|TLS 1.3 wss:// Port 52300| L
+        L <==>|TLS 1.3 wss:// Port 52300| A
+        A <==>|TLS 1.3 wss:// Port 52300| W
     end
 
     %% Discovery Layer
-    mDNS((mDNS / Zeroconf<br/>Service Discovery)) -.->|Broadcast _clipsync._tcp| W
-    mDNS -.->|Broadcast _clipsync._tcp| L
-    mDNS -.->|Broadcast _clipsync._tcp| A
+    mDNS((mDNS / Zeroconf<br/>Service Discovery)) -.->|TXT fingerprint| W
+    mDNS -.->|TXT fingerprint| L
+    mDNS -.->|TXT fingerprint| A
 
     style W fill:#1a73e8,stroke:#fff,stroke-width:2px,color:#fff
     style L fill:#d93025,stroke:#fff,stroke-width:2px,color:#fff
@@ -30,20 +30,21 @@ graph TD
     style mDNS fill:#fbbc04,stroke:#fff,stroke-width:2px,color:#000
 ```
 
-* **Zero Configuration:** Devices broadcast their presence via **mDNS (Multicast DNS)** under the service type `_clipsync._tcp`. 
-* **Dynamic Binding:** When a node discovers a peer, it extracts the local IP address (e.g., `192.168.1.5`) and dynamically binds an ephemeral WebSocket port to establish a direct tunnel.
+* **Zero Configuration Discovery:** Devices broadcast their presence via **mDNS (Multicast DNS)** under the service type `_clipsync._tcp`. The broadcast includes a SHA-256 fingerprint of the user's `SECRET_KEY`. Devices silently ignore discovery packets from unmatched fingerprints.
+* **Static Binding:** Nodes bind to a predefined port (default `52300`) to allow strict OS firewall rules.
 * **Fault Tolerance:** If any device drops off the network, the others continue communicating seamlessly.
 
 ---
 
-## 2. The Security Layer (E2EE)
-Because mDNS and raw WebSockets send data in plaintext, any user sharing the Wi-Fi network (or a bad actor packet sniffing) could easily intercept clipboard data. To combat this, ClipSync implements **End-to-End Encryption (E2EE)** at the application layer.
+## 2. The Application Security Layer (E2EE)
+Because mDNS broadcasts on the local LAN, any user sharing the Wi-Fi network could theoretically attempt connection. To combat this, ClipSync implements dual-layer security: **End-to-End Encryption (E2EE)** at the application layer, and **TLS 1.3** at the transport layer.
 
 ### 2.1 Cryptographic Protocol
 * **Algorithm:** AES (Advanced Encryption Standard)
 * **Key Size:** 256-bit
 * **Mode of Operation:** GCM (Galois/Counter Mode)
 * **Key Exchange:** Pre-Shared Key (PSK) via local `.env` files.
+* **Transport Encryption:** WebSockets over TLS (`wss://`) using bundled self-signed X.509 RSA Certificates.
 
 > [!CAUTION]
 > **Why AES-GCM?** 
@@ -52,36 +53,28 @@ Because mDNS and raw WebSockets send data in plaintext, any user sharing the Wi-
 ### 2.2 The Encryption Flow
 Whenever a device copies text, the payload undergoes the following transformation before touching the network:
 
-1. **Payload Generation:** The raw text is wrapped in a JSON object: `{"type": "clipboard", "text": "Hello World"}`
-2. **Nonce Generation:** A Cryptographically Secure Pseudo-Random Number Generator (CSPRNG) generates a unique, 12-byte initialization vector (Nonce) for the packet.
-3. **Encryption & Authentication:** The payload is encrypted using the 256-bit `SECRET_KEY` and the Nonce.
-4. **Encoding:** The Nonce and the resulting Ciphertext are Base64 encoded.
-5. **Transmission:** The fully encrypted JSON is blasted across the WebSocket tunnels.
-
-```json
-// What the network actually sees:
-{
-  "iv": "v4XbY/h8T3K1mNqL",
-  "data": "9aXbY...[encrypted blob]...7f8g="
-}
-```
-
-
+1. **Content Filtering:** The raw text is parsed through a Regex engine to detect extremely sensitive data (16-digit credit cards, RSA Private Keys). If detected, the sync is blocked locally.
+2. **Payload Generation:** The raw text is wrapped in a JSON object: `{"type": "clipboard", "text": "Hello World"}`
+3. **Nonce Generation:** A Cryptographically Secure Pseudo-Random Number Generator (CSPRNG) generates a unique, 12-byte initialization vector (Nonce) for the packet.
+4. **Encryption & Authentication:** The payload is encrypted using the 256-bit `SECRET_KEY` and the Nonce.
+5. **Encoding:** The Nonce and the resulting Ciphertext are Base64 encoded.
+6. **Transmission:** The fully encrypted JSON is blasted across the `wss://` tunnels.
 
 ---
 
-## 3. Platform Implementations
+## 3. Advanced Protection Mechanisms (v2.0)
+To ensure the mesh is completely hardened against Rogue Nodes and Network Sniffing, the following advanced mechanisms are built into the protocol:
+
+1. **2-Second Strict Authentication Handshake:** When a node connects to a peer's `wss://` server, it has exactly 2000 milliseconds to transmit a mathematically valid AES-256-GCM encrypted `{"type": "hello"}` payload. If the peer fails to provide this cryptographic proof of possession of the `SECRET_KEY`, the TCP socket is immediately terminated.
+2. **mDNS Fingerprinting:** The mDNS `TXT` record broadcasts a truncated SHA-256 hash of the `SECRET_KEY`. This prevents the mesh from even attempting to connect to rogue nodes on the network.
+3. **WSS Transport Encryption:** Raw WebSocket connections are wrapped in TLS 1.3 (`wss://`) using self-signed Certificates. This ensures that HTTP handshake headers and initial routing parameters are masked from Wi-Fi sniffers.
+
+## 4. Platform Implementations
 
 ### Windows & Linux (Python 3)
 * **Background Daemon:** Runs silently utilizing `asyncio` for non-blocking I/O.
-* **Clipboard Interaction:** Utilizes `pyperclip` to interact with native OS clipboards (Windows API, X11, Wayland).
-* **Monitoring:** Spins up an asynchronous background thread that continuously polls the clipboard (every `0.5s`) and triggers network broadcasts instantly upon detecting mutations.
+* **Clipboard Interaction:** Utilizes `pyperclip` to interact with native OS clipboards.
 
 ### Android (Flutter/Dart)
-* **Mobile Restrictions:** Modern Android versions (Android 10+) severely restrict apps from reading the clipboard while in the background for privacy reasons. 
-* **Workarounds:**
-  1. **Share Intent UI:** Leverages the native Android Share Menu. Users can highlight text in any app, tap "Share", and select ClipSync to immediately push the text to desktops.
-  2. **Persistent Notifications:** Implements a low-priority, ongoing background notification. Tapping "Sync" triggers a foreground clipboard read request, grabbing Android's current clipboard and pushing it to the mesh network.
-
-## 4. Summary
-ClipSync achieves absolute security by marrying the convenience of decentralized mDNS service discovery with the cryptographic ironclad guarantees of AES-256-GCM. It operates strictly on the Local Area Network, guaranteeing zero latency, zero cloud dependency, and total peace of mind for the end user.
+* **Share Intent UI:** Leverages the native Android Share Menu to push the text to desktops.
+* **Persistent Notifications:** Implements a low-priority, ongoing background notification to trigger manual pulls.

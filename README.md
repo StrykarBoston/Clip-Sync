@@ -11,8 +11,9 @@ ClipSync creates an encrypted, decentralized P2P mesh network over your local Wi
 
 ## 🌟 Features
 * **Cross-Platform**: Native support for Windows 11, Kali Linux (and other distros), and Android (10+).
-* **True P2P Architecture**: Decentralized mesh network using mDNS (Zeroconf) and WebSockets.
-* **Military-Grade Security**: 100% of local traffic is End-to-End Encrypted (E2EE) using AES-256-GCM.
+* **True P2P Architecture**: Decentralized mesh network using mDNS (Zeroconf) and Secure WebSockets (`wss://`).
+* **Military-Grade Security**: TLS 1.3 Transport Encryption + 100% End-to-End Encrypted (E2EE) payloads using AES-256-GCM.
+* **Content Filtering**: Automatically detects and blocks syncing of highly sensitive data like Credit Cards and Private Keys.
 * **No Cloud Dependency**: Works entirely offline on your local Local Area Network (LAN).
 * **Lightweight Desktop Clients**: The Windows and Linux clients are written in pure Python, bypassing the need for heavy Visual Studio Build Tools or Flutter desktop environments.
 
@@ -28,11 +29,15 @@ Before running ClipSync on any device, you MUST configure your encryption key. W
    ```python
    import secrets; print(secrets.token_hex(32))
    ```
-4. Paste the generated key into the `.env` file like so:
-   `SECRET_KEY=your_generated_hex_key_here`
+4. Paste the generated key into the `.env` file and set the static port:
+   ```env
+   SECRET_KEY=your_generated_hex_key_here
+   PORT=52300
+   SYNC_SENSITIVE_DATA=false
+   ```
 5. **Crucial:** You must copy this exact same `.env` file to the root of the Windows, Linux, and Android project folders on all your devices.
 
-> **Warning:** Never upload your `.env` file to a public repository!
+> **Warning:** Never upload your `.env` file to a public repository! (Especially if you build the Android APK, as it gets compiled into the assets).
 
 ---
 
