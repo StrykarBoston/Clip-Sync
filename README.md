@@ -114,7 +114,6 @@ If devices aren't syncing, check the following:
 * **Cause:** Missing Python dependencies or syntax errors.
 * **Fix:** Open CMD, run `python clip_sync.py` manually, and read the console output. Ensure `cryptography` and `python-dotenv` are installed globally or in your active virtual environment.
 
-```
 
 ## 🤝 Contributing
 Feel free to open issues or submit Pull Requests for enhancements!
