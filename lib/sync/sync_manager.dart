@@ -4,6 +4,10 @@ import 'dart:io';
 import 'package:nsd/nsd.dart';
 import 'package:uuid/uuid.dart';
 import 'package:clip_sync/sync/security_manager.dart';
+import 'dart:convert';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:cryptography/cryptography.dart';
 
 class SyncManager {
   static final SyncManager _instance = SyncManager._internal();
@@ -24,6 +28,24 @@ class SyncManager {
   final Set<String> _connectedPeers = {};
   final SecurityManager _securityManager = SecurityManager();
 
+  int get port => int.tryParse(dotenv.env['PORT'] ?? '52300') ?? 52300;
+  bool get syncSensitiveData => dotenv.env['SYNC_SENSITIVE_DATA']?.toLowerCase() == 'true';
+  String get secretKey => dotenv.env['SECRET_KEY'] ?? '';
+
+  Future<String> _getNetworkFingerprint() async {
+    if (secretKey.isEmpty) return "";
+    final algorithm = Sha256();
+    final hash = await algorithm.hash(utf8.encode(secretKey));
+    return hash.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join().substring(0, 16);
+  }
+
+  bool isSensitive(String text) {
+    if (syncSensitiveData) return false;
+    if (RegExp(r'\b(?:\d[ -]*?){13,19}\b').hasMatch(text)) return true;
+    if (text.contains('-----BEGIN') && text.contains('PRIVATE KEY-----')) return true;
+    return false;
+  }
+
   Future<void> initialize() async {
     // Start local WebSocket server
     await _startServer();
@@ -37,8 +59,15 @@ class SyncManager {
 
   Future<void> _startServer() async {
     try {
-      _server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
-      print('Secure WebSocket Server started on port ${_server!.port}');
+      final certBytes = await rootBundle.load('assets/certs/tls_cert.pem');
+      final keyBytes = await rootBundle.load('assets/certs/tls_key.pem');
+      
+      SecurityContext securityContext = SecurityContext()
+        ..useCertificateChainBytes(certBytes.buffer.asUint8List())
+        ..usePrivateKeyBytes(keyBytes.buffer.asUint8List());
+
+      _server = await HttpServer.bindSecure(InternetAddress.anyIPv4, port, securityContext);
+      print('Secure WSS Server started on port ${_server!.port}');
 
       _server!.listen((HttpRequest request) {
         if (WebSocketTransformer.isUpgradeRequest(request)) {
@@ -54,6 +83,17 @@ class SyncManager {
 
   void _handleConnection(WebSocket ws) async {
     _clients.add(ws);
+    
+    bool isAuthenticated = false;
+    Timer? authTimeout;
+    
+    authTimeout = Timer(const Duration(seconds: 2), () {
+      if (!isAuthenticated) {
+        print('Peer auth handshake timed out');
+        ws.close();
+      }
+    });
+
     ws.listen(
       (data) async {
         try {
@@ -63,13 +103,16 @@ class SyncManager {
             return;
           }
 
-          if (message['type'] == 'clipboard') {
-            final text = message['text'];
-            _clipboardStreamController.add(text);
-          } else if (message['type'] == 'hello') {
+          if (message['type'] == 'hello') {
+            isAuthenticated = true;
+            authTimeout?.cancel();
             final peerId = message['deviceId'];
             _connectedPeers.add(peerId);
             print('Securely connected to peer: $peerId');
+          } else if (message['type'] == 'clipboard') {
+            if (!isAuthenticated) return;
+            final text = message['text'];
+            _clipboardStreamController.add(text);
           }
         } catch (e) {
           print('Invalid message: $e');
@@ -94,10 +137,11 @@ class SyncManager {
     try {
       _registration = await register(
         Service(
-          name: 'ClipSync Service',
+          name: 'ClipSync Android-${deviceId.substring(0, 4)}',
           type: '_clipsync._tcp',
           host: '', 
           port: _server!.port,
+          txt: {'fingerprint': utf8.encode(await _getNetworkFingerprint())},
         ),
       );
     } catch (e) {
@@ -124,8 +168,15 @@ class SyncManager {
     final host = service.host!;
     final port = service.port!;
 
+    final fingerprint = service.txt?['fingerprint'];
+    final expected = await _getNetworkFingerprint();
+    if (fingerprint == null || utf8.decode(fingerprint) != expected) {
+      print('Discovered peer $host:$port with invalid fingerprint. Ignoring.');
+      return;
+    }
+
     try {
-      final ws = await WebSocket.connect('ws://$host:$port');
+      final ws = await WebSocket.connect('wss://$host:$port');
       _handleConnection(ws);
     } catch (e) {
       print('Could not connect to service $host:$port: $e');
@@ -133,6 +184,10 @@ class SyncManager {
   }
 
   Future<void> broadcastClipboard(String text) async {
+    if (isSensitive(text)) {
+      print('Sensitive data detected in clipboard. Sync paused for this item.');
+      return;
+    }
     final message = await _securityManager.encryptMessage({'type': 'clipboard', 'text': text});
     for (final ws in _clients) {
       ws.add(message);
