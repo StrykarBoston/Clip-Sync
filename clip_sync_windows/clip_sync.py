@@ -6,6 +6,7 @@ import threading
 import time
 import uuid
 import os
+import sys
 import base64
 
 import pyperclip
