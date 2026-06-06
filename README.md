@@ -36,9 +36,9 @@ Before running ClipSync on any device, you MUST configure your encryption key. W
    PORT=52300
    SYNC_SENSITIVE_DATA=false
    ```
-5. **Crucial:** You must copy this exact same `.env` file to the root of the Windows, Linux, and Android project folders on all your devices.
+5. **Crucial:** You must copy this exact same `.env` file to the root of the **Windows** and **Linux** project folders. *(For Android, you will simply paste the key directly into the app's Setup screen!)*
 
-> **Warning:** Never upload your `.env` file to a public repository! (Especially if you build the Android APK, as it gets compiled into the assets).
+> **Warning:** Never upload your `.env` file to a public repository! The desktop `.env` files are kept strictly local.
 
 ---
 
