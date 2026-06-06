@@ -1,15 +1,13 @@
 import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SecurityManager {
   late final SecretKey _secretKey;
   final _algorithm = AesGcm.with256bits();
 
-  SecurityManager() {
-    final sharedSecretHex = dotenv.env['SECRET_KEY'] ?? '';
+  void initialize(String sharedSecretHex) {
     if (sharedSecretHex.isEmpty) {
-      throw Exception('SECRET_KEY not found in .env file!');
+      throw Exception('SECRET_KEY cannot be empty!');
     }
     _secretKey = SecretKey(_hexDecode(sharedSecretHex));
   }

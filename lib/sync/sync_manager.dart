@@ -6,7 +6,6 @@ import 'package:uuid/uuid.dart';
 import 'package:clip_sync/sync/security_manager.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cryptography/cryptography.dart';
 
 class SyncManager {
@@ -29,9 +28,11 @@ class SyncManager {
   final Set<String> _seenNonces = {};
   final SecurityManager _securityManager = SecurityManager();
 
-  int get port => int.tryParse(dotenv.env['PORT'] ?? '52300') ?? 52300;
-  bool get syncSensitiveData => dotenv.env['SYNC_SENSITIVE_DATA']?.toLowerCase() == 'true';
-  String get secretKey => dotenv.env['SECRET_KEY'] ?? '';
+  int get port => 52300;
+  bool get syncSensitiveData => false;
+  
+  String _secretKey = '';
+  String get secretKey => _secretKey;
 
   Future<String> _getNetworkFingerprint() async {
     if (secretKey.isEmpty) return "";
@@ -47,7 +48,10 @@ class SyncManager {
     return false;
   }
 
-  Future<void> initialize() async {
+  Future<void> initialize(String key) async {
+    _secretKey = key;
+    _securityManager.initialize(key);
+
     // Start local WebSocket server
     await _startServer();
 

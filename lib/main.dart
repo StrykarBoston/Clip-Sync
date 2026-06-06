@@ -5,8 +5,9 @@ import 'package:clip_sync/android/android_manager.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:clip_sync/ui/setup_page.dart';
+import 'package:clip_sync/ui/settings_page.dart';
 class MyHttpOverrides extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {
@@ -18,12 +19,17 @@ class MyHttpOverrides extends HttpOverrides {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
-  await dotenv.load(fileName: ".env");
-  runApp(const ClipSyncApp());
+  
+  final prefs = await SharedPreferences.getInstance();
+  final secretKey = prefs.getString('SECRET_KEY') ?? '';
+  
+  runApp(ClipSyncApp(initialKey: secretKey));
 }
 
 class ClipSyncApp extends StatelessWidget {
-  const ClipSyncApp({super.key});
+  final String initialKey;
+  
+  const ClipSyncApp({super.key, required this.initialKey});
 
   @override
   Widget build(BuildContext context) {
@@ -34,13 +40,15 @@ class ClipSyncApp extends StatelessWidget {
         brightness: Brightness.dark,
         useMaterial3: true,
       ),
-      home: const HomePage(),
+      home: initialKey.length == 64 ? HomePage(secretKey: initialKey) : const SetupPage(),
     );
   }
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final String secretKey;
+  
+  const HomePage({super.key, required this.secretKey});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -63,7 +71,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _initialize() async {
     try {
       // 1. Initialize Networking
-      await _syncManager.initialize();
+      await _syncManager.initialize(widget.secretKey);
     } catch (e) {
       print("Sync Manager Error: $e");
     }
@@ -133,6 +141,17 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('ClipSync'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => SettingsPage(currentKey: widget.secretKey)),
+              );
+            },
+          )
+        ],
       ),
       body: Center(
         child: _isInitializing

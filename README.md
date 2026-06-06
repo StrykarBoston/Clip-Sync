@@ -81,17 +81,16 @@ The Linux client is also a lightweight Python script.
 ### 📱 Android Setup (Flutter)
 Due to Android 10+ background clipboard restrictions, the Android app integrates with your system's "Share" menu and provides a persistent notification for manual syncing.
 
-**Prerequisites:** Flutter SDK installed, or you can compile an APK directly.
-1. Navigate to the main directory: `cd clip_sync`
-2. Fetch dependencies: `flutter pub get`
-3. Build the release APK:
-   ```bash
-   flutter build apk --release
-   ```
-4. Transfer `build/app/outputs/flutter-apk/app-release.apk` to your phone and install it.
+**You do NOT need to compile the app from source!** You can simply install the pre-compiled APK.
+
+1. Download the latest `app-release.apk` from GitHub and install it on your Android device.
+2. Open the ClipSync app. It will present a **Setup Screen**.
+3. Paste the exact same 64-character `SECRET_KEY` that you generated for your Windows/Linux nodes into the text field.
+4. Tap **Save & Connect**. The key is securely saved to your phone's encrypted local storage—your key is never uploaded anywhere.
 5. **Usage on Android:** 
    * **To send to PC:** Highlight text -> tap "Share" -> choose "ClipSync".
    * **To receive from PC:** Open the persistent ClipSync notification and tap "Sync" to grab the latest text from the mesh network.
+   * **To change your key:** Tap the Settings gear icon in the top right of the app.
 
 ---
 

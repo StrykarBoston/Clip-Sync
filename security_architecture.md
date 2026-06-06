@@ -43,7 +43,7 @@ Because mDNS broadcasts on the local LAN, any user sharing the Wi-Fi network cou
 * **Algorithm:** AES (Advanced Encryption Standard)
 * **Key Size:** 256-bit
 * **Mode of Operation:** GCM (Galois/Counter Mode)
-* **Key Exchange:** Pre-Shared Key (PSK) via local `.env` files.
+* **Key Exchange:** Pre-Shared Key (PSK) stored via local `.env` files on Desktop nodes, and Secure Local Storage (`SharedPreferences`) on Mobile nodes.
 * **Transport Encryption:** WebSockets over TLS (`wss://`) using bundled self-signed X.509 RSA Certificates.
 
 > [!CAUTION]
