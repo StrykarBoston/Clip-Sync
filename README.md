@@ -103,8 +103,8 @@ If devices aren't syncing, check the following:
 * **Fix:** Log into your router and disable "AP Isolation", "Client Isolation", or "Guest Network". Ensure multicasting is enabled.
 
 **2. "SECRET_KEY not found" or "Decryption Failed" Logs**
-* **Cause:** Your `.env` files don't perfectly match across devices, or you forgot to rename `.env.example`.
-* **Fix:** Verify that `SECRET_KEY=...` is identical on Windows, Linux, and Android.
+* **Cause:** Your secret keys do not perfectly match across your devices.
+* **Fix:** Verify that the `SECRET_KEY=...` in your Windows/Linux `.env` files perfectly matches the 64-character key you typed into the Android Settings screen.
 
 **3. Linux client crashes with `PyperclipException`**
 * **Cause:** `pyperclip` cannot interface with your Linux clipboard.
