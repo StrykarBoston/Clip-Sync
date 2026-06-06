@@ -1,10 +1,22 @@
 import datetime
+import socket
+import ipaddress
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 import os
+
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 def generate_self_signed_cert():
     # Generate private key
@@ -19,6 +31,14 @@ def generate_self_signed_cert():
         x509.NameAttribute(NameOID.COMMON_NAME, u"localhost"),
     ])
     
+    local_ip = get_local_ip()
+    san_list = [
+        x509.DNSName(u"localhost"),
+        x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+    ]
+    if local_ip != "127.0.0.1":
+        san_list.append(x509.IPAddress(ipaddress.IPv4Address(local_ip)))
+
     cert = x509.CertificateBuilder().subject_name(
         subject
     ).issuer_name(
@@ -30,10 +50,10 @@ def generate_self_signed_cert():
     ).not_valid_before(
         datetime.datetime.utcnow()
     ).not_valid_after(
-        # Valid for 100 years
-        datetime.datetime.utcnow() + datetime.timedelta(days=36500)
+        # Valid for 1 year
+        datetime.datetime.utcnow() + datetime.timedelta(days=365)
     ).add_extension(
-        x509.SubjectAlternativeName([x509.DNSName(u"localhost")]),
+        x509.SubjectAlternativeName(san_list),
         critical=False,
     ).sign(private_key, hashes.SHA256())
 

@@ -26,6 +26,7 @@ class SyncManager {
   Stream<String> get onClipboardReceived => _clipboardStreamController.stream;
 
   final Set<String> _connectedPeers = {};
+  final Set<String> _seenNonces = {};
   final SecurityManager _securityManager = SecurityManager();
 
   int get port => int.tryParse(dotenv.env['PORT'] ?? '52300') ?? 52300;
@@ -104,6 +105,30 @@ class SyncManager {
           }
 
           if (message['type'] == 'hello') {
+            // Replay Protection: Timestamp check (30 seconds)
+            final int ts = message['timestamp'] ?? 0;
+            final int currentTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+            if ((currentTs - ts).abs() > 30) {
+              print('Peer failed auth handshake: Timestamp expired');
+              return;
+            }
+
+            // Replay Protection: Nonce cache
+            final String? nonce = message['nonce'];
+            if (nonce == null || _seenNonces.contains(nonce)) {
+              print('Peer failed auth handshake: Nonce reused');
+              return;
+            }
+            _seenNonces.add(nonce);
+            if (_seenNonces.length > 1000) _seenNonces.clear();
+
+            // Fingerprint verification
+            final expectedFingerprint = await _getNetworkFingerprint();
+            if (message['fingerprint'] != expectedFingerprint) {
+              print('Peer failed auth handshake: Invalid fingerprint');
+              return;
+            }
+
             isAuthenticated = true;
             authTimeout?.cancel();
             final peerId = message['deviceId'];
@@ -127,7 +152,14 @@ class SyncManager {
     );
 
     // Say hello
-    final helloMessage = await _securityManager.encryptMessage({'type': 'hello', 'deviceId': deviceId});
+    final helloPayload = {
+      'type': 'hello',
+      'deviceId': deviceId,
+      'timestamp': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      'nonce': const Uuid().v4(),
+      'fingerprint': await _getNetworkFingerprint()
+    };
+    final helloMessage = await _securityManager.encryptMessage(helloPayload);
     ws.add(helloMessage);
   }
 

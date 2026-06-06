@@ -65,9 +65,9 @@ Whenever a device copies text, the payload undergoes the following transformatio
 ## 3. Advanced Protection Mechanisms (v2.0)
 To ensure the mesh is completely hardened against Rogue Nodes and Network Sniffing, the following advanced mechanisms are built into the protocol:
 
-1. **2-Second Strict Authentication Handshake:** When a node connects to a peer's `wss://` server, it has exactly 2000 milliseconds to transmit a mathematically valid AES-256-GCM encrypted `{"type": "hello"}` payload. If the peer fails to provide this cryptographic proof of possession of the `SECRET_KEY`, the TCP socket is immediately terminated.
-2. **mDNS Fingerprinting:** The mDNS `TXT` record broadcasts a truncated SHA-256 hash of the `SECRET_KEY`. This prevents the mesh from even attempting to connect to rogue nodes on the network.
-3. **WSS Transport Encryption:** Raw WebSocket connections are wrapped in TLS 1.3 (`wss://`) using self-signed Certificates. This ensures that HTTP handshake headers and initial routing parameters are masked from Wi-Fi sniffers.
+1. **Strict HMAC Authentication & Replay Protection:** The `hello` handshake natively enforces cryptographic integrity. It carries a real-time UTC timestamp and a UUID Nonce. The server enforces a strict 30-second synchronization window and maintains a local cache of previously seen Nonces. Any duplicate payloads or expired tokens are immediately rejected, entirely thwarting Replay Attacks.
+2. **Deep Fingerprint Handshake Validation:** The mDNS `TXT` record broadcasts a truncated SHA-256 hash of the `SECRET_KEY` for network discovery. Crucially, the same cryptographic fingerprint is injected directly into the AES-GCM encrypted `hello` payload. The peer validates this fingerprint natively on the active WebSocket connection before accepting any clipboard traffic.
+3. **Strict TLS 1.3 Compliance:** Raw WebSocket connections are wrapped in TLS 1.3 (`wss://`) using generated certificates with standard 1-year validities. The client dynamically inserts the local machine's IP address into the Subject Alternative Name (SAN) list, ensuring that even strict TLS clients seamlessly accept the secure tunnels.
 
 ## 4. Platform Implementations
 

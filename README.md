@@ -13,6 +13,7 @@ ClipSync creates an encrypted, decentralized P2P mesh network over your local Wi
 * **Cross-Platform**: Native support for Windows 11, Kali Linux (and other distros), and Android (10+).
 * **True P2P Architecture**: Decentralized mesh network using mDNS (Zeroconf) and Secure WebSockets (`wss://`).
 * **Military-Grade Security**: TLS 1.3 Transport Encryption + 100% End-to-End Encrypted (E2EE) payloads using AES-256-GCM.
+* **Advanced Replay Protection**: Strict 30-second timestamp windows and dynamic Nonce caching to thwart Replay Attacks.
 * **Content Filtering**: Automatically detects and blocks syncing of highly sensitive data like Credit Cards and Private Keys.
 * **No Cloud Dependency**: Works entirely offline on your local Local Area Network (LAN).
 * **Lightweight Desktop Clients**: The Windows and Linux clients are written in pure Python, bypassing the need for heavy Visual Studio Build Tools or Flutter desktop environments.

@@ -82,14 +82,22 @@ class ClipSyncWindows:
         self.last_clipboard = ""
         self.loop = asyncio.get_event_loop()
         self.security = SecurityManager()
+        self.seen_nonces = set()
 
 
 
     async def handle_client(self, websocket):
         self.active_websockets.add(websocket)
         try:
-            # Send hello
-            encrypted_hello = self.security.encrypt_message({'type': 'hello', 'deviceId': DEVICE_ID})
+            # Send hello with timestamp, nonce, and fingerprint
+            hello_payload = {
+                'type': 'hello', 
+                'deviceId': DEVICE_ID,
+                'timestamp': int(time.time()),
+                'nonce': str(uuid.uuid4()),
+                'fingerprint': NETWORK_FINGERPRINT
+            }
+            encrypted_hello = self.security.encrypt_message(hello_payload)
             await websocket.send(encrypted_hello)
             
             # Auth Handshake with 2-second timeout
@@ -97,8 +105,31 @@ class ClipSyncWindows:
                 first_message = await asyncio.wait_for(websocket.recv(), timeout=2.0)
                 data = self.security.decrypt_message(first_message)
                 if not data or data.get('type') != 'hello':
-                    logger.warning("Peer failed auth handshake")
+                    logger.warning("Peer failed auth handshake: Invalid payload")
                     return
+                
+                # Replay Protection: Timestamp check (30 seconds)
+                ts = data.get('timestamp', 0)
+                if abs(time.time() - ts) > 30:
+                    logger.warning("Peer failed auth handshake: Timestamp expired")
+                    return
+                
+                # Replay Protection: Nonce cache
+                nonce = data.get('nonce')
+                if not nonce or nonce in self.seen_nonces:
+                    logger.warning("Peer failed auth handshake: Nonce reused")
+                    return
+                self.seen_nonces.add(nonce)
+                
+                # Cleanup nonce cache occasionally
+                if len(self.seen_nonces) > 1000:
+                    self.seen_nonces.clear()
+
+                # Fingerprint verification
+                if data.get('fingerprint') != NETWORK_FINGERPRINT:
+                    logger.warning("Peer failed auth handshake: Invalid fingerprint")
+                    return
+
                 peer_id = data.get('deviceId')
                 logger.info(f"Securely connected to peer: {peer_id}")
             except asyncio.TimeoutError:
