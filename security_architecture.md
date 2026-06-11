@@ -62,12 +62,20 @@ Whenever a device copies text, the payload undergoes the following transformatio
 
 ---
 
-## 3. Advanced Protection Mechanisms (v2.0)
-To ensure the mesh is completely hardened against Rogue Nodes and Network Sniffing, the following advanced mechanisms are built into the protocol:
+## 3. Advanced Protection Mechanisms (v3.0)
+To ensure the mesh is completely hardened against Rogue Nodes, Network Sniffing, and Replay Attacks, the following advanced security mechanisms are enforced in the protocol:
 
-1. **Strict HMAC Authentication & Replay Protection:** The `hello` handshake natively enforces cryptographic integrity. It carries a real-time UTC timestamp and a UUID Nonce. The server enforces a strict 30-second synchronization window and maintains a local cache of previously seen Nonces. Any duplicate payloads or expired tokens are immediately rejected, entirely thwarting Replay Attacks.
-2. **Deep Fingerprint Handshake Validation:** The mDNS `TXT` record broadcasts a truncated SHA-256 hash of the `SECRET_KEY` for network discovery. Crucially, the same cryptographic fingerprint is injected directly into the AES-GCM encrypted `hello` payload. The peer validates this fingerprint natively on the active WebSocket connection before accepting any clipboard traffic.
-3. **Strict TLS 1.3 Compliance:** Raw WebSocket connections are wrapped in TLS 1.3 (`wss://`) using generated certificates with standard 1-year validities. The client dynamically inserts the local machine's IP address into the Subject Alternative Name (SAN) list, ensuring that even strict TLS clients seamlessly accept the secure tunnels.
+1. **Authentication-before-Broadcast Enforcement (CS-001, CS-003, CS-006):** 
+   A strict connection isolation protocol is implemented. When a peer connects via WebSocket, they are initially held in a sandboxed state. They are **not** added to the active broadcast client list and will not receive any clipboard data broadcasts until they successfully complete the cryptographic handshake. If the authentication payload is invalid, expired, or missing, the server responds with a `{"status": "rejected", "reason": "unauthorized"}` message and immediately closes the socket.
+   
+2. **Granular TTL-based Nonce Cache (CS-008):** 
+   To prevent replay attacks, incoming handshakes must contain a unique nonce. Previously, nonces were cached in a set and periodically cleared in bulk (creating a race window where recently used nonces could be replayed). In v3.0, nonces are stored in a map along with their generation timestamp. The system performs granular, continuous eviction of expired nonces (older than 60 seconds), ensuring no nonce can be reused within the 30-second replay window without risking bulk cache clearance.
+
+3. **Dynamic TLS 1.3 SAN Auto-Regeneration (CS-009, CS-007):** 
+   To maintain strict TLS 1.3 validation without requiring static IP addresses:
+   * **Node Autonomy:** Each device generates its own unique self-signed X.509 certificate. Certificates are not shared between devices, preventing impersonation.
+   * **Auto-Regeneration:** At startup, Windows and Linux nodes automatically check if the IP address inside the Subject Alternative Name (SAN) of the existing `tls_cert.pem` matches the current active LAN IP of the node. If there is a mismatch, the node automatically regenerates a new 1-year validity TLS certificate with the correct IP SAN.
+   * **Strict Validity:** Certificates are constrained to a secure 1-year expiration window (365 days) instead of insecure 100-year configurations.
 
 ## 4. Platform Implementations
 

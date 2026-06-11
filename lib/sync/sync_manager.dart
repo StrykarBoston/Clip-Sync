@@ -25,7 +25,7 @@ class SyncManager {
   Stream<String> get onClipboardReceived => _clipboardStreamController.stream;
 
   final Set<String> _connectedPeers = {};
-  final Set<String> _seenNonces = {};
+  final Map<String, int> _seenNonces = {};  // {nonce: epoch_seconds} for TTL-based eviction
   final SecurityManager _securityManager = SecurityManager();
 
   int get port => 52300;
@@ -86,9 +86,14 @@ class SyncManager {
     }
   }
 
+  /// Remove nonces older than 60 seconds from the cache.
+  void _evictExpiredNonces() {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    _seenNonces.removeWhere((_, ts) => now - ts > 60);
+  }
+
   void _handleConnection(WebSocket ws) async {
-    _clients.add(ws);
-    
+    // NOTE: ws is NOT added to _clients until auth passes (CS-001 fix)
     bool isAuthenticated = false;
     Timer? authTimeout;
     
@@ -114,26 +119,31 @@ class SyncManager {
             final int currentTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
             if ((currentTs - ts).abs() > 30) {
               print('Peer failed auth handshake: Timestamp expired');
+              ws.add('{"status": "rejected", "reason": "timestamp_expired"}');
               return;
             }
 
-            // Replay Protection: Nonce cache
+            // Replay Protection: Nonce cache with TTL-based eviction
+            _evictExpiredNonces();
             final String? nonce = message['nonce'];
-            if (nonce == null || _seenNonces.contains(nonce)) {
+            if (nonce == null || _seenNonces.containsKey(nonce)) {
               print('Peer failed auth handshake: Nonce reused');
+              ws.add('{"status": "rejected", "reason": "nonce_reused"}');
               return;
             }
-            _seenNonces.add(nonce);
-            if (_seenNonces.length > 1000) _seenNonces.clear();
+            _seenNonces[nonce] = currentTs;
 
             // Fingerprint verification
             final expectedFingerprint = await _getNetworkFingerprint();
             if (message['fingerprint'] != expectedFingerprint) {
               print('Peer failed auth handshake: Invalid fingerprint');
+              ws.add('{"status": "rejected", "reason": "invalid_fingerprint"}');
               return;
             }
 
+            // === AUTH PASSED — only NOW add to broadcast pool ===
             isAuthenticated = true;
+            _clients.add(ws);
             authTimeout?.cancel();
             final peerId = message['deviceId'];
             _connectedPeers.add(peerId);
@@ -148,14 +158,16 @@ class SyncManager {
         }
       },
       onDone: () {
-        _clients.remove(ws);
+        if (isAuthenticated) _clients.remove(ws);
       },
       onError: (e) {
-        _clients.remove(ws);
+        if (isAuthenticated) _clients.remove(ws);
       },
     );
 
     // Say hello
+    // NOTE: generate_cert.py --target android must be run before building APK
+    // to ensure the bundled cert has the correct IP SAN for the Android device.
     final helloPayload = {
       'type': 'hello',
       'deviceId': deviceId,

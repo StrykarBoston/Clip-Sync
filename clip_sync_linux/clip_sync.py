@@ -8,12 +8,16 @@ import uuid
 import sys
 import os
 import base64
+import ipaddress
+import datetime
 
 import pyperclip
 import websockets
 from websockets import serve
 from zeroconf import IPVersion, ServiceBrowser, ServiceInfo, Zeroconf
+from cryptography import x509
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives import hashes
 from cryptography.exceptions import InvalidTag
 from dotenv import load_dotenv
 import ssl
@@ -82,12 +86,19 @@ class ClipSyncLinux:
         self.last_clipboard = ""
         self.loop = asyncio.get_event_loop()
         self.security = SecurityManager()
-        self.seen_nonces = set()
+        self.seen_nonces = {}  # {nonce_str: timestamp} for TTL-based eviction
 
 
+
+    def _evict_expired_nonces(self):
+        """Remove nonces older than 60 seconds from the cache."""
+        now = time.time()
+        expired = [n for n, ts in self.seen_nonces.items() if now - ts > 60]
+        for n in expired:
+            del self.seen_nonces[n]
 
     async def handle_client(self, websocket):
-        self.active_websockets.add(websocket)
+        authenticated = False
         try:
             # Send hello with timestamp, nonce, and fingerprint
             hello_payload = {
@@ -106,28 +117,29 @@ class ClipSyncLinux:
                 data = self.security.decrypt_message(first_message)
                 if not data or data.get('type') != 'hello':
                     logger.warning("Peer failed auth handshake: Invalid payload")
+                    await websocket.send(json.dumps({"status": "rejected", "reason": "invalid_payload"}))
                     return
                 
                 # Replay Protection: Timestamp check (30 seconds)
                 ts = data.get('timestamp', 0)
                 if abs(time.time() - ts) > 30:
                     logger.warning("Peer failed auth handshake: Timestamp expired")
+                    await websocket.send(json.dumps({"status": "rejected", "reason": "timestamp_expired"}))
                     return
                 
-                # Replay Protection: Nonce cache
+                # Replay Protection: Nonce cache with TTL-based eviction
+                self._evict_expired_nonces()
                 nonce = data.get('nonce')
                 if not nonce or nonce in self.seen_nonces:
                     logger.warning("Peer failed auth handshake: Nonce reused")
+                    await websocket.send(json.dumps({"status": "rejected", "reason": "nonce_reused"}))
                     return
-                self.seen_nonces.add(nonce)
-                
-                # Cleanup nonce cache occasionally
-                if len(self.seen_nonces) > 1000:
-                    self.seen_nonces.clear()
+                self.seen_nonces[nonce] = time.time()
 
                 # Fingerprint verification
                 if data.get('fingerprint') != NETWORK_FINGERPRINT:
                     logger.warning("Peer failed auth handshake: Invalid fingerprint")
+                    await websocket.send(json.dumps({"status": "rejected", "reason": "invalid_fingerprint"}))
                     return
 
                 peer_id = data.get('deviceId')
@@ -136,6 +148,10 @@ class ClipSyncLinux:
                 logger.warning("Peer auth handshake timed out")
                 return
             
+            # === AUTH PASSED — only NOW add to broadcast pool ===
+            authenticated = True
+            self.active_websockets.add(websocket)
+
             async for encrypted_message in websocket:
                 data = self.security.decrypt_message(encrypted_message)
                 if not data:
@@ -148,7 +164,8 @@ class ClipSyncLinux:
                         self.last_clipboard = text
                         pyperclip.copy(text)
         finally:
-            self.active_websockets.remove(websocket)
+            if authenticated:
+                self.active_websockets.discard(websocket)
 
     async def connect_to_peer(self, host, port):
         uri = f"wss://{host}:{port}"
@@ -237,11 +254,83 @@ class ClipSyncLinux:
                 pass
             time.sleep(0.5)
 
+    def _ensure_cert_matches_ip(self):
+        """Auto-regenerate TLS cert if the IP SAN doesn't match the current LAN IP."""
+        cert_path = 'tls_cert.pem'
+        key_path = 'tls_key.pem'
+        local_ip = self.get_local_ip()
+
+        regenerate = False
+        if not os.path.exists(cert_path) or not os.path.exists(key_path):
+            regenerate = True
+            logger.info("TLS cert/key not found, generating...")
+        else:
+            try:
+                from cryptography.x509 import load_pem_x509_certificate
+                from cryptography.x509.oid import ExtensionOID
+                with open(cert_path, 'rb') as f:
+                    cert = load_pem_x509_certificate(f.read())
+                san_ext = cert.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
+                san_ips = [str(ip) for ip in san_ext.value.get_values_for_type(x509.IPAddress)]
+                if local_ip not in san_ips:
+                    logger.warning(f"Cert SAN IPs {san_ips} don't include current IP {local_ip}. Regenerating...")
+                    regenerate = True
+                else:
+                    logger.info(f"TLS cert SAN matches current IP {local_ip}")
+            except Exception as e:
+                logger.warning(f"Could not parse existing cert: {e}. Regenerating...")
+                regenerate = True
+
+        if regenerate:
+            self._generate_cert(local_ip, cert_path, key_path)
+
+    def _generate_cert(self, local_ip, cert_path, key_path):
+        """Generate a self-signed TLS cert with the correct IP SAN."""
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives import serialization
+
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        subject = issuer = x509.Name([
+            x509.NameAttribute(x509.oid.NameOID.ORGANIZATION_NAME, u"ClipSync Local Mesh"),
+            x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, u"localhost"),
+        ])
+        san_list = [
+            x509.DNSName(u"localhost"),
+            x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+        ]
+        if local_ip != "127.0.0.1":
+            san_list.append(x509.IPAddress(ipaddress.IPv4Address(local_ip)))
+
+        cert = x509.CertificateBuilder().subject_name(subject).issuer_name(issuer).public_key(
+            private_key.public_key()
+        ).serial_number(
+            x509.random_serial_number()
+        ).not_valid_before(
+            datetime.datetime.now(datetime.UTC)
+        ).not_valid_after(
+            datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=365)
+        ).add_extension(
+            x509.SubjectAlternativeName(san_list), critical=False,
+        ).sign(private_key, hashes.SHA256())
+
+        with open(cert_path, 'wb') as f:
+            f.write(cert.public_bytes(serialization.Encoding.PEM))
+        with open(key_path, 'wb') as f:
+            f.write(private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption()
+            ))
+        logger.info(f"TLS cert generated: SAN includes IP:{local_ip}, validity=1yr")
+
     async def main_async(self):
         self.start_mDNS()
         
         watcher_thread = threading.Thread(target=self.clipboard_watcher_sync, daemon=True)
         watcher_thread.start()
+
+        # Auto-regenerate cert if SAN IP doesn't match current LAN IP (CS-009)
+        self._ensure_cert_matches_ip()
 
         logger.info(f"Starting Secure WSS server on port {self.port}...")
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

@@ -40,6 +40,20 @@ Before running ClipSync on any device, you MUST configure your encryption key. W
 
 > **Warning:** Never upload your `.env` file to a public repository! The desktop `.env` files are kept strictly local.
 
+### 🔑 TLS Certificate Management
+
+ClipSync uses transport-layer encryption via Secure WebSockets (`wss://`). Each device operates as an autonomous node with its own self-signed TLS certificates.
+
+* **Self-Healing Auto-Regeneration:** At startup, the **Windows** and **Linux** Python nodes will check if the Subject Alternative Name (SAN) inside their existing certificate matches their current local LAN IP. If there is a mismatch (e.g., due to DHCP assignment), the client automatically regenerates a secure, 1-year validity TLS certificate with the correct IP SAN in-place.
+* **Manual Certificate Generation:** You can manually generate certificates for specific platforms using the upgraded `generate_cert.py` script:
+  ```bash
+  # Generate for a specific platform (outputs directly to the target folders)
+  python generate_cert.py --target [windows|linux|android|certs|all]
+
+  # Generate with an explicit IP override (useful if node has multiple network interfaces)
+  python generate_cert.py --target android --ip 192.168.1.7
+  ```
+
 ---
 
 ## 💻 Installation & Setup
