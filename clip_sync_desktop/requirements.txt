@@ -1,0 +1,13 @@
+# ClipSync Desktop Requirements
+flask>=3.1.0
+flask-socketio>=5.5.0
+flask-wtf>=1.2.2
+pyperclip>=1.9.0
+websockets>=14.0
+zeroconf>=0.145.0
+cryptography>=44.0.0
+python-dotenv>=1.0.1
+Pillow>=11.0.0
+python-magic>=0.4.27; sys_platform != "win32"
+python-magic-bin>=0.4.14; sys_platform == "win32"
+eventlet>=0.37.0

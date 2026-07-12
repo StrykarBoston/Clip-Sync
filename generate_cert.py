@@ -29,10 +29,10 @@ def get_local_ip():
         return "127.0.0.1"
 
 def generate_self_signed_cert(output_dirs, override_ip=None):
-    # Generate private key
+    # --- VULN-014 FIX: Upgrade to RSA 4096-bit ---
     private_key = rsa.generate_private_key(
         public_exponent=65537,
-        key_size=2048,
+        key_size=4096,
     )
 
     # Generate public certificate
@@ -92,7 +92,7 @@ def generate_self_signed_cert(output_dirs, override_ip=None):
     print(f"\n  Detected LAN IP:  {local_ip}")
     print(f"  SAN entries:      {', '.join(san_names)}")
     print(f"  Validity:         1 year (expires {not_after.strftime('%Y-%m-%d')})")
-    print(f"  Key size:         2048-bit RSA")
+    print(f"  Key size:         4096-bit RSA")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

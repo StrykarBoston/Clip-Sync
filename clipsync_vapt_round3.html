@@ -1,0 +1,345 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.page{padding:1.5rem 0;font-family:var(--font-sans)}
+.hdr{border-bottom:0.5px solid var(--color-border-tertiary);padding-bottom:1rem;margin-bottom:1.5rem}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.hdr-title{font-size:17px;font-weight:500}
+.r3badge{font-size:11px;font-weight:500;padding:3px 10px;border-radius:var(--border-radius-md);background:#EEEDFE;color:#3C3489}
+.meta{display:flex;gap:16px;flex-wrap:wrap}
+.mi{font-size:12px;color:var(--color-text-secondary)}
+.mi span{color:var(--color-text-primary);font-weight:500}
+.prog-section{margin-bottom:1.5rem}
+.prog-title{font-size:12px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem}
+.rounds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:1.5rem}
+.round-card{background:var(--color-background-secondary);border-radius:var(--border-radius-lg);padding:.85rem 1rem}
+.rc-label{font-size:11px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.rc-score{font-size:24px;font-weight:500;margin-bottom:4px}
+.rc-bar{height:5px;background:var(--color-border-tertiary);border-radius:3px;overflow:hidden;margin-bottom:4px}
+.rb-fill{height:100%;border-radius:3px}
+.rc-note{font-size:11px;color:var(--color-text-tertiary)}
+.s-crit{color:var(--color-text-danger)}.s-warn{color:#854F0B}.s-ok{color:var(--color-text-success)}
+.device-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:1.5rem}
+.dev-card{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:.85rem 1rem}
+.dev-name{font-size:13px;font-weight:500;margin-bottom:2px}
+.dev-ip{font-size:11px;font-family:var(--font-mono);color:var(--color-text-secondary);margin-bottom:.75rem}
+.dev-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.dev-row:last-child{border-bottom:none}
+.dev-check{font-size:13px}
+.pill{font-size:10px;font-weight:500;padding:1px 7px;border-radius:var(--border-radius-md)}
+.p-crit{background:var(--color-background-danger);color:var(--color-text-danger)}
+.p-warn{background:#FAEEDA;color:#633806}
+.p-ok{background:var(--color-background-success);color:var(--color-text-success)}
+.p-new{background:#EEEDFE;color:#3C3489}
+.p-part{background:#E6F1FB;color:#0C447C}
+.finding{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);margin-bottom:.625rem;overflow:hidden}
+.fh{display:flex;align-items:center;gap:8px;padding:.7rem 1rem;cursor:pointer;user-select:none}
+.fh:hover{background:var(--color-background-secondary)}
+.fid{font-size:11px;color:var(--color-text-tertiary);font-family:var(--font-mono);min-width:52px}
+.ft{flex:1;font-size:13.5px;font-weight:500}
+.badge{font-size:11px;font-weight:500;padding:2px 9px;border-radius:var(--border-radius-md)}
+.bc{background:var(--color-background-danger);color:var(--color-text-danger)}
+.bw{background:#FAEEDA;color:#633806}
+.bm{background:#E6F1FB;color:#0C447C}
+.bg{background:var(--color-background-success);color:var(--color-text-success)}
+.chev{font-size:11px;color:var(--color-text-tertiary);transition:transform .15s}
+.is-open .chev{transform:rotate(90deg)}
+.is-open .fb{display:block}
+.is-closed .fb{display:none}
+.fb{padding:.75rem 1rem 1rem;border-top:0.5px solid var(--color-border-tertiary);font-size:13px;line-height:1.6;color:var(--color-text-secondary)}
+.ev{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:.55rem .8rem;margin:.5rem 0;font-family:var(--font-mono);font-size:11.5px;color:var(--color-text-primary);line-height:1.5;word-break:break-all}
+.fix{margin-top:.7rem;padding:.55rem .8rem;background:var(--color-background-success);border-radius:var(--border-radius-md);color:var(--color-text-success);font-size:12.5px}
+.fbtn{display:inline-flex;align-items:center;gap:4px;margin-top:.75rem;padding:5px 12px;font-size:12.5px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);cursor:pointer;background:transparent;color:var(--color-text-primary)}
+.fbtn:hover{background:var(--color-background-secondary)}
+.sec{font-size:12px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin:1.5rem 0 .75rem}
+.diff-wrap{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:.75rem 1rem;margin-bottom:1.5rem}
+.dr{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12.5px}
+.dr:last-child{border-bottom:none}
+.did{font-family:var(--font-mono);font-size:11px;color:var(--color-text-tertiary);min-width:52px}
+.dd{flex:1;color:var(--color-text-secondary)}
+.r1c{font-size:10px;min-width:54px;text-align:center;color:var(--color-text-tertiary)}
+.r2c{font-size:10px;min-width:54px;text-align:center;color:var(--color-text-tertiary)}
+.r3c{min-width:80px;text-align:right}
+</style>
+
+<h2 class="sr-only">ClipSync VAPT Round 3 — Third penetration test iteration across Windows, Linux, and Android nodes, verifying remediation of all previously found and newly discovered vulnerabilities.</h2>
+
+<div class="page">
+
+<div class="hdr">
+  <div class="hdr-top">
+    <span class="hdr-title">ClipSync — VAPT report</span>
+    <span class="r3badge">Round 3 — Full 3-Device Assessment</span>
+  </div>
+  <div class="meta">
+    <div class="mi">Nodes <span>Win 192.168.1.5 · Linux 192.168.1.11 · Android 192.168.1.10</span></div>
+    <div class="mi">Port <span>52300</span></div>
+    <div class="mi">Tester <span>Kali MCP 192.168.1.13</span></div>
+    <div class="mi">Date <span>Jun 06, 2026</span></div>
+  </div>
+</div>
+
+<div class="sec">Score progression — all 3 rounds</div>
+<div class="rounds">
+  <div class="round-card">
+    <div class="rc-label">Round 1</div>
+    <div class="rc-score s-crit">4.2 / 10</div>
+    <div class="rc-bar"><div class="rb-fill" style="width:42%;background:var(--color-text-danger)"></div></div>
+    <div class="rc-note">2 critical · 1 high · 2 medium</div>
+  </div>
+  <div class="round-card">
+    <div class="rc-label">Round 2</div>
+    <div class="rc-score s-warn">6.1 / 10</div>
+    <div class="rc-bar"><div class="rb-fill" style="width:61%;background:#BA7517"></div></div>
+    <div class="rc-note">1 critical · 0 high · 2 medium</div>
+  </div>
+  <div class="round-card">
+    <div class="rc-label">Round 3 — now</div>
+    <div class="rc-score s-warn">5.8 / 10</div>
+    <div class="rc-bar"><div class="rb-fill" style="width:58%;background:#E24B4A"></div></div>
+    <div class="rc-note">1 critical · 2 medium · 2 new</div>
+  </div>
+</div>
+
+<div class="sec">Per-device status</div>
+<div class="device-grid">
+  <div class="dev-card">
+    <div class="dev-name">Windows</div>
+    <div class="dev-ip">192.168.1.5 : 52300</div>
+    <div class="dev-row"><span>Auth verify</span><span class="pill p-crit">Fail</span></div>
+    <div class="dev-row"><span>Replay block</span><span class="pill p-crit">Fail</span></div>
+    <div class="dev-row"><span>Fingerprint</span><span class="pill p-crit">Fail</span></div>
+    <div class="dev-row"><span>TLS 1yr cert</span><span class="pill p-ok">Pass</span></div>
+    <div class="dev-row"><span>IP SAN</span><span class="pill p-ok">Pass</span></div>
+    <div class="dev-row"><span>ws:// reject</span><span class="pill p-ok">Pass</span></div>
+  </div>
+  <div class="dev-card">
+    <div class="dev-name">Linux</div>
+    <div class="dev-ip">192.168.1.11 : 52300</div>
+    <div class="dev-row"><span>Auth verify</span><span class="pill p-crit">Fail</span></div>
+    <div class="dev-row"><span>Replay block</span><span class="pill p-crit">Fail</span></div>
+    <div class="dev-row"><span>Fingerprint</span><span class="pill p-crit">Fail</span></div>
+    <div class="dev-row"><span>TLS 1yr cert</span><span class="pill p-ok">Pass</span></div>
+    <div class="dev-row"><span>IP SAN</span><span class="pill p-warn">Wrong IP</span></div>
+    <div class="dev-row"><span>ws:// reject</span><span class="pill p-ok">Pass</span></div>
+  </div>
+  <div class="dev-card">
+    <div class="dev-name">Android</div>
+    <div class="dev-ip">192.168.1.10 : 52300</div>
+    <div class="dev-row"><span>Auth verify</span><span class="pill p-crit">Fail</span></div>
+    <div class="dev-row"><span>Replay block</span><span class="pill p-crit">Fail</span></div>
+    <div class="dev-row"><span>Fingerprint</span><span class="pill p-crit">Fail</span></div>
+    <div class="dev-row"><span>TLS 1yr cert</span><span class="pill p-crit">100yr!</span></div>
+    <div class="dev-row"><span>IP SAN</span><span class="pill p-crit">Missing</span></div>
+    <div class="dev-row"><span>ws:// reject</span><span class="pill p-ok">Pass</span></div>
+  </div>
+</div>
+
+<div class="sec">Round 1 → 2 → 3 delta</div>
+<div class="diff-wrap">
+  <div class="dr">
+    <span class="did">CS-001</span>
+    <span class="dd">Auth token — HMAC not verified</span>
+    <span class="r1c"><span class="pill p-crit">Open</span></span>
+    <span class="r2c"><span class="pill p-crit">Open</span></span>
+    <span class="r3c"><span class="pill p-crit">Still open</span></span>
+  </div>
+  <div class="dr">
+    <span class="did">CS-002</span>
+    <span class="dd">Plain ws:// unencrypted transport</span>
+    <span class="r1c"><span class="pill p-crit">Open</span></span>
+    <span class="r2c"><span class="pill p-ok">Fixed</span></span>
+    <span class="r3c"><span class="pill p-ok">Confirmed ✓</span></span>
+  </div>
+  <div class="dr">
+    <span class="did">CS-003</span>
+    <span class="dd">Fingerprint not enforced</span>
+    <span class="r1c"><span class="pill p-warn">Partial</span></span>
+    <span class="r2c"><span class="pill p-crit">Open</span></span>
+    <span class="r3c"><span class="pill p-crit">Still open</span></span>
+  </div>
+  <div class="dr">
+    <span class="did">CS-004</span>
+    <span class="dd">Ephemeral port</span>
+    <span class="r1c"><span class="pill p-crit">Open</span></span>
+    <span class="r2c"><span class="pill p-ok">Fixed</span></span>
+    <span class="r3c"><span class="pill p-ok">Confirmed ✓</span></span>
+  </div>
+  <div class="dr">
+    <span class="did">CS-005</span>
+    <span class="dd">No clipboard content filter</span>
+    <span class="r1c"><span class="pill p-warn">Open</span></span>
+    <span class="r2c"><span class="pill p-ok">Fixed</span></span>
+    <span class="r3c"><span class="pill p-ok">Confirmed ✓</span></span>
+  </div>
+  <div class="dr">
+    <span class="did">CS-006</span>
+    <span class="dd">Replay attack — expired token</span>
+    <span class="r1c"><span class="pill p-new">New</span></span>
+    <span class="r2c"><span class="pill p-crit">Open</span></span>
+    <span class="r3c"><span class="pill p-crit">Still open</span></span>
+  </div>
+  <div class="dr">
+    <span class="did">CS-007</span>
+    <span class="dd">TLS cert — 100yr + no SAN</span>
+    <span class="r1c"><span class="pill p-new">New</span></span>
+    <span class="r2c"><span class="pill p-crit">Open</span></span>
+    <span class="r3c"><span class="pill p-part">Partial</span></span>
+  </div>
+  <div class="dr">
+    <span class="did">CS-008</span>
+    <span class="dd">Nonce reuse — replay via same nonce</span>
+    <span class="r1c"><span class="pill p-new">—</span></span>
+    <span class="r2c"><span class="pill p-new">—</span></span>
+    <span class="r3c"><span class="pill p-new">New R3</span></span>
+  </div>
+  <div class="dr">
+    <span class="did">CS-009</span>
+    <span class="dd">Linux cert has wrong IP SAN</span>
+    <span class="r1c"><span class="pill p-new">—</span></span>
+    <span class="r2c"><span class="pill p-new">—</span></span>
+    <span class="r3c"><span class="pill p-new">New R3</span></span>
+  </div>
+</div>
+
+<div class="sec">Open findings — details</div>
+
+<div class="finding is-open" id="f1">
+  <div class="fh" onclick="tog('f1')">
+    <span class="fid">CS-001</span>
+    <span class="ft">Auth token — HMAC signature never verified (all 3 devices)</span>
+    <span class="badge bc">Critical</span>
+    <span class="pill p-crit" style="margin-left:4px">3rd round open</span>
+    <i class="ti ti-chevron-right chev" aria-hidden="true"></i>
+  </div>
+  <div class="fb">
+    <p>For 3 consecutive rounds, the server accepts connections without verifying the HMAC signature. The <code>verify_auth_token()</code> function exists in code but is not being called inside <code>handle_connection()</code> before data is sent. Root cause is almost certainly a missing function call.</p>
+    <div class="ev">[R3 LIVE] Windows — no token sent → received clipboard data<br>[R3 LIVE] Linux   — fake sig sent → received clipboard data<br>[R3 LIVE] Android — fake sig sent → received clipboard data<br>Expected on all: {"status": "rejected"}</div>
+    <div class="fix">
+      Root cause: your <code>handle_connection()</code> is likely structured like this (broken):<br><br>
+      <code>async def handle_connection(ws):</code><br>
+      <code>&nbsp;&nbsp;async for msg in ws: ← broadcasts BEFORE auth</code><br><br>
+      It must be:<br>
+      <code>async def handle_connection(ws):</code><br>
+      <code>&nbsp;&nbsp;token = await ws.recv() ← FIRST</code><br>
+      <code>&nbsp;&nbsp;if not verify_auth_token(token): return ← SECOND</code><br>
+      <code>&nbsp;&nbsp;async for msg in ws: ... ← THEN sync</code>
+    </div>
+    <button class="fbtn" onclick="sendPrompt('Show me the exact corrected handle_connection() for ClipSync that fixes CS-001 — auth must run before any data is sent ↗')">Fix CS-001 now ↗</button>
+  </div>
+</div>
+
+<div class="finding is-closed" id="f6">
+  <div class="fh" onclick="tog('f6')">
+    <span class="fid">CS-006</span>
+    <span class="ft">Replay attack — expired tokens accepted (all 3 devices)</span>
+    <span class="badge bm">Medium</span>
+    <span class="pill p-crit" style="margin-left:4px">3rd round open</span>
+    <i class="ti ti-chevron-right chev" aria-hidden="true"></i>
+  </div>
+  <div class="fb">
+    <p>Tokens with timestamps 180 seconds in the past accepted on all 3 nodes. This is directly tied to CS-001 — since <code>verify_auth_token()</code> is never called, the timestamp check inside it also never runs. Fixing CS-001 will fix this too.</p>
+    <div class="ev">[R3 LIVE] Sent token timestamp = now - 180s<br>[R3 LIVE] All 3 nodes: returned clipboard data<br>Timestamp window check (30s) not executing</div>
+    <div class="fix">Automatically fixed when CS-001 is fixed — verify runs timestamp check internally.</div>
+  </div>
+</div>
+
+<div class="finding is-closed" id="f3">
+  <div class="fh" onclick="tog('f3')">
+    <span class="fid">CS-003</span>
+    <span class="ft">Wrong fingerprint accepted — peer not validated (all 3)</span>
+    <span class="badge bm">Medium</span>
+    <span class="pill p-crit" style="margin-left:4px">3rd round open</span>
+    <i class="ti ti-chevron-right chev" aria-hidden="true"></i>
+  </div>
+  <div class="fb">
+    <p>Token with <code>fingerprint=WRONGFINGERPRINT00</code> accepted on all 3 nodes. Same root cause as CS-001 — fingerprint check is inside <code>verify_auth_token()</code> which is never called.</p>
+    <div class="ev">[R3 LIVE] Sent fingerprint: WRONGFINGERPRINT00<br>[R3 LIVE] All 3 nodes: returned clipboard data<br>Trusted fingerprint list not checked</div>
+    <div class="fix">Automatically fixed when CS-001 is fixed.</div>
+  </div>
+</div>
+
+<div class="finding is-closed" id="f8">
+  <div class="fh" onclick="tog('f8')">
+    <span class="fid">CS-008</span>
+    <span class="ft">Nonce reuse — same nonce accepted twice (all 3 devices)</span>
+    <span class="badge bm">Medium</span>
+    <span class="pill p-new" style="margin-left:4px">New R3</span>
+    <i class="ti ti-chevron-right chev" aria-hidden="true"></i>
+  </div>
+  <div class="fb">
+    <p>The same nonce value was sent in two separate connections — both accepted. A nonce cache (short-lived blacklist of used nonces) is needed to prevent an attacker from replaying a captured valid token within the 30-second window.</p>
+    <div class="ev">[R3 LIVE] Nonce "same_nonce_reuse_test" sent twice<br>[R3 LIVE] Both connections: returned clipboard data<br>No nonce deduplication in place</div>
+    <div class="fix">Add a <code>set()</code> nonce cache with TTL. On auth: check nonce not in cache → add to cache → auto-expire after 60s using <code>asyncio</code> task or timestamp-based eviction.</div>
+  </div>
+</div>
+
+<div class="finding is-closed" id="f9">
+  <div class="fh" onclick="tog('f9')">
+    <span class="fid">CS-009</span>
+    <span class="ft">Linux cert has wrong IP SAN — shows Windows IP</span>
+    <span class="badge bm">Medium</span>
+    <span class="pill p-new" style="margin-left:4px">New R3</span>
+    <i class="ti ti-chevron-right chev" aria-hidden="true"></i>
+  </div>
+  <div class="fb">
+    <p>Linux node (192.168.1.11) is serving a TLS cert with IP SAN <code>192.168.1.5</code> (Windows IP). Cert was likely copied from Windows instead of regenerated. Strict TLS clients connecting to 192.168.1.11 will get a SAN mismatch error.</p>
+    <div class="ev">Linux node cert SAN: IP Address:192.168.1.5 ← wrong<br>Expected:           IP Address:192.168.1.11<br>Android cert: DNS:localhost only, Not After: 2126 ← still 100yr</div>
+    <div class="fix">Regenerate cert independently on Linux and Android nodes. Each device must generate its own cert using its own LAN IP as the SAN. Do not copy certs across devices.</div>
+    <button class="fbtn" onclick="sendPrompt('Show me the Python cert generation code for ClipSync that auto-detects the local LAN IP and adds it as IP SAN ↗')">Auto-detect IP fix ↗</button>
+  </div>
+</div>
+
+<div class="sec">Confirmed fixed — all 3 rounds</div>
+
+<div class="finding is-closed" id="f2">
+  <div class="fh" onclick="tog('f2')">
+    <span class="fid">CS-002 / CS-004 / CS-005</span>
+    <span class="ft">Transport, port, encryption — all confirmed clean</span>
+    <span class="badge bg">Passed</span>
+    <i class="ti ti-chevron-right chev" aria-hidden="true"></i>
+  </div>
+  <div class="fb">
+    <div class="ev">[R3] ws:// plain → refused on ALL 3 nodes ✓<br>[R3] wss:// TLSv1.3 AES-256-GCM active on Win + Linux ✓<br>[R3] Port 52300 fixed and consistent ✓<br>[R3] Clipboard payload encrypted, unique IVs ✓<br>[R3] Win cert: 1yr validity, correct IP SAN 192.168.1.5 ✓</div>
+  </div>
+</div>
+
+<div class="sec">One-shot fix priority</div>
+<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1.5rem">
+  <div style="display:flex;align-items:flex-start;gap:12px;padding:.7rem 1rem;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md)">
+    <i class="ti ti-circle-1-filled" style="font-size:18px;color:var(--color-text-danger);margin-top:1px" aria-hidden="true"></i>
+    <div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:2px">Call verify_auth_token() at the TOP of handle_connection() — CS-001/CS-003/CS-006 all auto-fix</div>
+      <div style="font-size:12px;color:var(--color-text-secondary)">One missing function call is causing 3 vulnerabilities</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:flex-start;gap:12px;padding:.7rem 1rem;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md)">
+    <i class="ti ti-circle-2-filled" style="font-size:18px;color:#854F0B;margin-top:1px" aria-hidden="true"></i>
+    <div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:2px">Add nonce cache set() with 60s TTL — CS-008</div>
+      <div style="font-size:12px;color:var(--color-text-secondary)">Prevents replay within the valid timestamp window</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:flex-start;gap:12px;padding:.7rem 1rem;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md)">
+    <i class="ti ti-circle-3-filled" style="font-size:18px;color:#185FA5;margin-top:1px" aria-hidden="true"></i>
+    <div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:2px">Regenerate TLS cert on Linux + Android independently — CS-009 / CS-007</div>
+      <div style="font-size:12px;color:var(--color-text-secondary)">Auto-detect local LAN IP for SAN — do not copy certs</div>
+    </div>
+  </div>
+</div>
+
+<button class="fbtn" onclick="sendPrompt('Show me the final complete corrected handle_connection() with verify_auth_token call, nonce cache, and auto IP-SAN cert generation for ClipSync ↗')">
+  <i class="ti ti-shield-check" aria-hidden="true"></i> Get all final fixes ↗
+</button>
+
+</div>
+
+<script>
+function tog(id){
+  const el=document.getElementById(id);
+  el.classList.toggle('is-open');
+  el.classList.toggle('is-closed');
+}
+</script>

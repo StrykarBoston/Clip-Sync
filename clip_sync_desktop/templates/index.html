@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipSync Dashboard</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="brand">
+                <i data-lucide="zap" class="brand-icon"></i>
+                <span>ClipSync</span>
+            </div>
+            <ul class="nav-links">
+                <li class="active" data-section="dashboard">
+                    <i data-lucide="layout-dashboard"></i> <span>Dashboard</span>
+                </li>
+                <li data-section="transfers">
+                    <i data-lucide="folder-sync"></i> <span>Transfers</span>
+                </li>
+                <li data-section="security">
+                    <i data-lucide="shield-check"></i> <span>Security</span>
+                </li>
+                <li data-section="settings">
+                    <i data-lucide="settings"></i> <span>Settings</span>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <div class="pulse-dot green"></div>
+                    <span>Engine Online</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="content-section active">
+                <header class="section-header">
+                    <h1>Dashboard</h1>
+                    <p>Real-time mesh network status</p>
+                </header>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon"><i data-lucide="network"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-peers">0</span>
+                            <span class="stat-label">Connected Peers</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon"><i data-lucide="activity"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-syncs">0</span>
+                            <span class="stat-label">Syncs Today</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon"><i data-lucide="clock"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-uptime">0s</span>
+                            <span class="stat-label">Uptime</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon"><i data-lucide="arrow-down-to-line"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-transfers">0</span>
+                            <span class="stat-label">Active Transfers</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <!-- Live Console -->
+                    <div class="glass-card console-card">
+                        <div class="card-header">
+                            <h3><i data-lucide="terminal"></i> Live Console</h3>
+                            <button id="clear-console" class="btn-icon" title="Clear Console"><i data-lucide="trash-2"></i></button>
+                        </div>
+                        <div class="console-output" id="log-console">
+                            <!-- Logs injected here -->
+                        </div>
+                    </div>
+
+                    <!-- Peer Map -->
+                    <div class="glass-card peers-card">
+                        <div class="card-header">
+                            <h3><i data-lucide="users"></i> Active Peers</h3>
+                        </div>
+                        <div class="peers-list" id="peers-list">
+                            <div class="empty-state">No peers connected</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Transfers Section -->
+            <section id="transfers" class="content-section">
+                <header class="section-header">
+                    <h1>File Transfers</h1>
+                    <p>Drag and drop files to broadcast to all peers</p>
+                </header>
+
+                <div class="upload-zone" id="drop-zone">
+                    <input type="file" id="file-input" multiple hidden>
+                    <i data-lucide="upload-cloud" class="upload-icon"></i>
+                    <h3>Drop files here or click to browse</h3>
+                    <p>Max file size: 100 MB</p>
+                </div>
+
+                <div class="glass-card mt-2">
+                    <div class="card-header">
+                        <h3>Transfer History</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="transfers-table">
+                            <thead>
+                                <tr>
+                                    <th>Direction</th>
+                                    <th>Filename</th>
+                                    <th>Size</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transfers-tbody">
+                                <!-- History injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Security Section -->
+            <section id="security" class="content-section">
+                <header class="section-header">
+                    <h1>Security & Compliance</h1>
+                    <p>OWASP Top 10 2025 Architecture</p>
+                </header>
+
+                <div class="dashboard-grid">
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <h3><i data-lucide="shield-alert"></i> OWASP Top 10 Checklist</h3>
+                        </div>
+                        <ul class="security-list" id="owasp-list">
+                            <!-- Populated by JS -->
+                        </ul>
+                    </div>
+
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <h3><i data-lucide="lock"></i> Active Protections</h3>
+                        </div>
+                        <ul class="security-list" id="protections-list">
+                            <!-- Populated by JS -->
+                        </ul>
+                        
+                        <div class="card-header mt-2">
+                            <h3><i data-lucide="file-badge-2"></i> TLS Certificate</h3>
+                        </div>
+                        <div class="cert-info" id="cert-info">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section id="settings" class="content-section">
+                <header class="section-header">
+                    <h1>Settings</h1>
+                    <p>Configure node parameters</p>
+                </header>
+
+                <div class="glass-card settings-card">
+                    <form id="settings-form">
+                        <div class="form-group">
+                            <label for="secret_key">Secret Key (64-char Hex)</label>
+                            <div class="input-with-icon">
+                                <i data-lucide="key"></i>
+                                <input type="password" id="secret_key" placeholder="Enter new 64-char hex key (leave blank to keep current)">
+                                <button type="button" id="toggle-key-vis" class="btn-icon"><i data-lucide="eye"></i></button>
+                            </div>
+                            <small id="current-key-hint">Current: ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••</small>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="port">Port</label>
+                                <div class="input-with-icon">
+                                    <i data-lucide="hash"></i>
+                                    <input type="number" id="port" value="52300" min="1024" max="65535">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="sync_sensitive">Sync Sensitive Data</label>
+                                <select id="sync_sensitive">
+                                    <option value="false">False (Blocked)</option>
+                                    <option value="true">True (Allowed)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>File Save Location</label>
+                            <div class="readonly-box" id="save-location">
+                                Loading...
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary">
+                                <i data-lucide="save"></i> Save & Restart Node
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

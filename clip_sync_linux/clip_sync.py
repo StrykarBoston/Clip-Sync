@@ -10,6 +10,7 @@ import os
 import base64
 import ipaddress
 import datetime
+import hmac
 
 import pyperclip
 import websockets
@@ -18,11 +19,13 @@ from zeroconf import IPVersion, ServiceBrowser, ServiceInfo, Zeroconf
 from cryptography import x509
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.exceptions import InvalidTag
 from dotenv import load_dotenv
 import ssl
 import re
 import hashlib
+from collections import defaultdict
 
 load_dotenv()
 
@@ -30,38 +33,110 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 SERVICE_TYPE = "_clipsync._tcp.local."
-DEVICE_ID = str(uuid.uuid4())
-SHARED_SECRET_HEX = os.environ.get("SECRET_KEY")
 PORT = int(os.environ.get("PORT", 52300))
 SYNC_SENSITIVE_DATA = os.environ.get("SYNC_SENSITIVE_DATA", "false").lower() == "true"
-NETWORK_FINGERPRINT = hashlib.sha256(SHARED_SECRET_HEX.encode('utf-8')).hexdigest()[:16] if SHARED_SECRET_HEX else ""
+SHARED_SECRET_HEX = os.environ.get("SECRET_KEY")
 
 if not SHARED_SECRET_HEX:
     logger.error("SECRET_KEY not found in .env file! Exiting.")
     sys.exit(1)
 
+# --- VULN-020 FIX: Persistent device ID ---
+DEVICE_ID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "device_id.txt")
+
+def _load_or_create_device_id():
+    """Load device ID from disk, or create and persist a new one."""
+    if os.path.exists(DEVICE_ID_FILE):
+        try:
+            with open(DEVICE_ID_FILE, 'r') as f:
+                device_id = f.read().strip()
+                if device_id:
+                    return device_id
+        except Exception:
+            pass
+    device_id = str(uuid.uuid4())
+    try:
+        with open(DEVICE_ID_FILE, 'w') as f:
+            f.write(device_id)
+    except Exception as e:
+        logger.warning(f"Could not persist device ID: {e}")
+    return device_id
+
+DEVICE_ID = _load_or_create_device_id()
+
+# --- VULN-008 FIX: HMAC-based time-window challenge instead of static fingerprint ---
+def _compute_network_challenge():
+    """Compute an HMAC-based challenge using a 5-minute time window.
+    This avoids broadcasting a static fingerprint that could be used for offline brute-force."""
+    time_window = int(time.time()) // 300  # 5-minute windows
+    msg = f"clipsync-challenge:{time_window}".encode('utf-8')
+    return hmac.new(SHARED_SECRET_HEX.encode('utf-8'), msg, hashlib.sha256).hexdigest()[:16]
+
+def _verify_network_challenge(challenge):
+    """Verify challenge against current and previous time window (to handle boundary transitions)."""
+    current = _compute_network_challenge()
+    if hmac.compare_digest(challenge, current):
+        return True
+    # Check previous window for clock skew tolerance
+    prev_window = (int(time.time()) // 300) - 1
+    prev_msg = f"clipsync-challenge:{prev_window}".encode('utf-8')
+    prev_challenge = hmac.new(SHARED_SECRET_HEX.encode('utf-8'), prev_msg, hashlib.sha256).hexdigest()[:16]
+    return hmac.compare_digest(challenge, prev_challenge)
+
+# --- VULN-019 FIX: Expanded sensitive data filter ---
 def is_sensitive(text):
     if SYNC_SENSITIVE_DATA:
         return False
-    # Basic credit card regex (13-19 digits with optional spaces/dashes)
+    # Credit card numbers (13-19 digits with optional spaces/dashes)
     if re.search(r'\b(?:\d[ -]*?){13,19}\b', text):
         return True
-    # Private key headers
+    # Private key headers (PEM)
     if '-----BEGIN' in text and 'PRIVATE KEY-----' in text:
+        return True
+    # Social Security Numbers (SSN)
+    if re.search(r'\b\d{3}-\d{2}-\d{4}\b', text):
+        return True
+    # AWS Access Key IDs
+    if re.search(r'AKIA[0-9A-Z]{16}', text):
+        return True
+    # AWS Secret Access Keys (40-char base64)
+    if re.search(r'(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY)\s*[:=]\s*\S{40}', text):
+        return True
+    # Generic API keys / tokens (common patterns)
+    if re.search(r'(?:api[_-]?key|api[_-]?secret|access[_-]?token|auth[_-]?token)\s*[:=]\s*\S{16,}', text, re.IGNORECASE):
+        return True
+    # JSON Web Tokens (JWT)
+    if re.search(r'eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}', text):
+        return True
+    # Password patterns in config/env
+    if re.search(r'(?:password|passwd|pwd)\s*[:=]\s*\S+', text, re.IGNORECASE):
         return True
     return False
 
+
 class SecurityManager:
     def __init__(self):
-        self.aesgcm = AESGCM(bytes.fromhex(SHARED_SECRET_HEX))
+        # --- VULN-011 FIX: Use HKDF for key derivation ---
+        raw_key = bytes.fromhex(SHARED_SECRET_HEX)
+        derived_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b'clipsync-e2ee',
+        ).derive(raw_key)
+        self.aesgcm = AESGCM(derived_key)
 
     def encrypt_message(self, message_dict):
+        # --- VULN-009 FIX: Add AAD (message type) to AES-GCM ---
+        msg_type = message_dict.get('type', 'unknown')
+        aad = f"{msg_type}".encode('utf-8')
         plaintext = json.dumps(message_dict).encode('utf-8')
         nonce = os.urandom(12)
-        ciphertext = self.aesgcm.encrypt(nonce, plaintext, None)
+        ciphertext = self.aesgcm.encrypt(nonce, plaintext, aad)
         return json.dumps({
             'iv': base64.b64encode(nonce).decode('utf-8'),
-            'data': base64.b64encode(ciphertext).decode('utf-8')
+            'data': base64.b64encode(ciphertext).decode('utf-8'),
+            'aad': msg_type
         })
 
     def decrypt_message(self, payload_str):
@@ -71,11 +146,40 @@ class SecurityManager:
                 return None
             nonce = base64.b64decode(payload['iv'])
             ciphertext = base64.b64decode(payload['data'])
-            plaintext = self.aesgcm.decrypt(nonce, ciphertext, None)
+            # --- VULN-009 FIX: Verify AAD ---
+            aad_str = payload.get('aad', 'unknown')
+            aad = aad_str.encode('utf-8')
+            plaintext = self.aesgcm.decrypt(nonce, ciphertext, aad)
             return json.loads(plaintext.decode('utf-8'))
         except (InvalidTag, json.JSONDecodeError, KeyError, ValueError) as e:
             logger.error(f"Decryption or parsing failed: {e}")
             return None
+
+
+# --- VULN-016 FIX: Persistent nonce cache ---
+NONCE_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nonce_cache.json")
+
+def _load_nonce_cache():
+    """Load nonce cache from disk."""
+    if os.path.exists(NONCE_CACHE_FILE):
+        try:
+            with open(NONCE_CACHE_FILE, 'r') as f:
+                cache = json.load(f)
+                # Only keep nonces that are less than 60 seconds old
+                now = time.time()
+                return {k: v for k, v in cache.items() if now - v < 60}
+        except Exception:
+            pass
+    return {}
+
+def _save_nonce_cache(cache):
+    """Persist nonce cache to disk."""
+    try:
+        with open(NONCE_CACHE_FILE, 'w') as f:
+            json.dump(cache, f)
+    except Exception as e:
+        logger.warning(f"Could not persist nonce cache: {e}")
+
 
 class ClipSyncLinux:
     def __init__(self):
@@ -86,9 +190,11 @@ class ClipSyncLinux:
         self.last_clipboard = ""
         self.loop = asyncio.get_event_loop()
         self.security = SecurityManager()
-        self.seen_nonces = {}  # {nonce_str: timestamp} for TTL-based eviction
-
-
+        # --- VULN-016 FIX: Load persisted nonce cache ---
+        self.seen_nonces = _load_nonce_cache()
+        # --- VULN-004 FIX: Per-IP connection tracking ---
+        self._connections_per_ip = defaultdict(int)
+        self._max_connections_per_ip = 5
 
     def _evict_expired_nonces(self):
         """Remove nonces older than 60 seconds from the cache."""
@@ -96,58 +202,79 @@ class ClipSyncLinux:
         expired = [n for n, ts in self.seen_nonces.items() if now - ts > 60]
         for n in expired:
             del self.seen_nonces[n]
+        # Persist after eviction
+        _save_nonce_cache(self.seen_nonces)
+
+    def _get_remote_ip(self, websocket):
+        """Extract remote IP from websocket connection."""
+        try:
+            return websocket.remote_address[0]
+        except Exception:
+            return "unknown"
 
     async def handle_client(self, websocket):
         authenticated = False
+        remote_ip = self._get_remote_ip(websocket)
+
+        # --- VULN-004 FIX: Per-IP connection limiting ---
+        if self._connections_per_ip[remote_ip] >= self._max_connections_per_ip:
+            logger.warning(f"Connection limit exceeded for IP {remote_ip}. Rejecting.")
+            await websocket.close()
+            return
+
+        self._connections_per_ip[remote_ip] += 1
+
         try:
-            # Send hello with timestamp, nonce, and fingerprint
+            # Send hello with timestamp, nonce, and challenge
             hello_payload = {
-                'type': 'hello', 
+                'type': 'hello',
                 'deviceId': DEVICE_ID,
                 'timestamp': int(time.time()),
                 'nonce': str(uuid.uuid4()),
-                'fingerprint': NETWORK_FINGERPRINT
+                'fingerprint': _compute_network_challenge()
             }
             encrypted_hello = self.security.encrypt_message(hello_payload)
             await websocket.send(encrypted_hello)
-            
+
             # Auth Handshake with 2-second timeout
             try:
                 first_message = await asyncio.wait_for(websocket.recv(), timeout=2.0)
                 data = self.security.decrypt_message(first_message)
                 if not data or data.get('type') != 'hello':
-                    logger.warning("Peer failed auth handshake: Invalid payload")
-                    await websocket.send(json.dumps({"status": "rejected", "reason": "invalid_payload"}))
+                    logger.warning(f"Peer {remote_ip} failed auth handshake: Invalid payload")
+                    # --- VULN-015 FIX: Close silently instead of sending plaintext rejection ---
+                    await websocket.close()
                     return
-                
+
                 # Replay Protection: Timestamp check (30 seconds)
                 ts = data.get('timestamp', 0)
                 if abs(time.time() - ts) > 30:
-                    logger.warning("Peer failed auth handshake: Timestamp expired")
-                    await websocket.send(json.dumps({"status": "rejected", "reason": "timestamp_expired"}))
+                    logger.warning(f"Peer {remote_ip} failed auth handshake: Timestamp expired")
+                    await websocket.close()
                     return
-                
+
                 # Replay Protection: Nonce cache with TTL-based eviction
                 self._evict_expired_nonces()
                 nonce = data.get('nonce')
                 if not nonce or nonce in self.seen_nonces:
-                    logger.warning("Peer failed auth handshake: Nonce reused")
-                    await websocket.send(json.dumps({"status": "rejected", "reason": "nonce_reused"}))
+                    logger.warning(f"Peer {remote_ip} failed auth handshake: Nonce reused")
+                    await websocket.close()
                     return
                 self.seen_nonces[nonce] = time.time()
+                _save_nonce_cache(self.seen_nonces)
 
-                # Fingerprint verification
-                if data.get('fingerprint') != NETWORK_FINGERPRINT:
-                    logger.warning("Peer failed auth handshake: Invalid fingerprint")
-                    await websocket.send(json.dumps({"status": "rejected", "reason": "invalid_fingerprint"}))
+                # --- VULN-008 FIX: HMAC-based challenge verification ---
+                if not _verify_network_challenge(data.get('fingerprint', '')):
+                    logger.warning(f"Peer {remote_ip} failed auth handshake: Invalid challenge")
+                    await websocket.close()
                     return
 
                 peer_id = data.get('deviceId')
                 logger.info(f"Securely connected to peer: {peer_id}")
             except asyncio.TimeoutError:
-                logger.warning("Peer auth handshake timed out")
+                logger.warning(f"Peer {remote_ip} auth handshake timed out")
                 return
-            
+
             # === AUTH PASSED — only NOW add to broadcast pool ===
             authenticated = True
             self.active_websockets.add(websocket)
@@ -155,8 +282,8 @@ class ClipSyncLinux:
             async for encrypted_message in websocket:
                 data = self.security.decrypt_message(encrypted_message)
                 if not data:
-                    continue # Drop invalid/unauthenticated messages
-                
+                    continue  # Drop invalid/unauthenticated messages
+
                 if data.get('type') == 'clipboard':
                     text = data.get('text')
                     if text and text != self.last_clipboard:
@@ -166,6 +293,10 @@ class ClipSyncLinux:
         finally:
             if authenticated:
                 self.active_websockets.discard(websocket)
+            # --- VULN-004 FIX: Decrement per-IP counter ---
+            self._connections_per_ip[remote_ip] = max(0, self._connections_per_ip[remote_ip] - 1)
+            if self._connections_per_ip[remote_ip] == 0:
+                del self._connections_per_ip[remote_ip]
 
     async def connect_to_peer(self, host, port):
         uri = f"wss://{host}:{port}"
@@ -173,7 +304,9 @@ class ClipSyncLinux:
             client_ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             client_ssl_context.check_hostname = False
             client_ssl_context.verify_mode = ssl.CERT_NONE
-            
+            # --- VULN-001 FIX: Enforce TLS 1.2+ on client side too ---
+            client_ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+
             async with websockets.connect(uri, ssl=client_ssl_context) as websocket:
                 logger.info(f"Connected to peer at {uri}")
                 await self.handle_client(websocket)
@@ -187,16 +320,11 @@ class ClipSyncLinux:
             if addresses:
                 host = addresses[0]
                 port = info.port
-                
-                fingerprint = info.properties.get(b'fingerprint', b'').decode()
-                if fingerprint != NETWORK_FINGERPRINT:
-                    logger.warning(f"Discovered peer {host}:{port} with invalid fingerprint. Ignoring.")
-                    return
-                
+
                 if port == self.port and host == self.get_local_ip():
                     return
 
-                logger.info(f"Discovered trusted peer at {host}:{port}")
+                logger.info(f"Discovered peer at {host}:{port}")
                 asyncio.run_coroutine_threadsafe(self.connect_to_peer(host, port), self.loop)
 
     def remove_service(self, zeroconf, type, name):
@@ -217,13 +345,15 @@ class ClipSyncLinux:
 
     def start_mDNS(self):
         local_ip = self.get_local_ip()
+        # --- VULN-007 FIX: Generic service name without platform identifier ---
+        # --- VULN-008 FIX: No fingerprint in mDNS TXT records ---
         info = ServiceInfo(
             SERVICE_TYPE,
-            f"ClipSync Linux-{DEVICE_ID[:4]}.{SERVICE_TYPE}",
+            f"ClipSync-{DEVICE_ID[:4]}.{SERVICE_TYPE}",
             addresses=[socket.inet_aton(local_ip)],
             port=self.port,
-            properties={'fingerprint': NETWORK_FINGERPRINT},
-            server=f"{socket.gethostname().replace('.','')}.local.",
+            properties={},  # No fingerprint broadcast
+            server=f"clipsync-node.local.",  # Generic hostname
         )
         self.zeroconf.register_service(info)
         self.browser = ServiceBrowser(self.zeroconf, SERVICE_TYPE, self)
@@ -243,7 +373,7 @@ class ClipSyncLinux:
                         logger.warning("Sensitive data detected in clipboard. Sync paused for this item.")
                         self.last_clipboard = current_clipboard
                         continue
-                        
+
                     self.last_clipboard = current_clipboard
                     logger.info(f"Local clipboard changed, broadcasting securely: {current_clipboard[:20]}...")
                     asyncio.run_coroutine_threadsafe(self.broadcast_clipboard(current_clipboard), self.loop)
@@ -289,7 +419,8 @@ class ClipSyncLinux:
         from cryptography.hazmat.primitives.asymmetric import rsa
         from cryptography.hazmat.primitives import serialization
 
-        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        # --- VULN-014 FIX: Upgrade to RSA 4096-bit ---
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
         subject = issuer = x509.Name([
             x509.NameAttribute(x509.oid.NameOID.ORGANIZATION_NAME, u"ClipSync Local Mesh"),
             x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, u"localhost"),
@@ -321,28 +452,43 @@ class ClipSyncLinux:
                 format=serialization.PrivateFormat.TraditionalOpenSSL,
                 encryption_algorithm=serialization.NoEncryption()
             ))
-        logger.info(f"TLS cert generated: SAN includes IP:{local_ip}, validity=1yr")
+        logger.info(f"TLS cert generated (RSA-4096): SAN includes IP:{local_ip}, validity=1yr")
 
     async def main_async(self):
         self.start_mDNS()
-        
+
         watcher_thread = threading.Thread(target=self.clipboard_watcher_sync, daemon=True)
         watcher_thread.start()
 
-        # Auto-regenerate cert if SAN IP doesn't match current LAN IP (CS-009)
+        # Auto-regenerate cert if SAN IP doesn't match current LAN IP
         self._ensure_cert_matches_ip()
 
         logger.info(f"Starting Secure WSS server on port {self.port}...")
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ssl_context.load_cert_chain(certfile='tls_cert.pem', keyfile='tls_key.pem')
-        
-        async with serve(self.handle_client, "0.0.0.0", self.port, ssl=ssl_context):
+
+        # --- VULN-001 FIX: Enforce TLS 1.2+ minimum ---
+        ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+
+        # --- VULN-002 FIX: Restrict cipher suites, ban anonymous ciphers ---
+        ssl_context.set_ciphers('ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5')
+
+        # --- VULN-005 FIX: max_size limits payload size ---
+        # --- VULN-006 FIX: server_header=None suppresses version info ---
+        async with serve(
+            self.handle_client,
+            "0.0.0.0",
+            self.port,
+            ssl=ssl_context,
+            max_size=65536,  # 64KB max payload
+            server_header=None,  # Suppress Server header
+        ):
             await asyncio.Future()
 
 if __name__ == "__main__":
     if sys.platform != 'linux':
         logger.warning("This script is optimized for Linux, but you are not on Linux. Proceeding anyway...")
-        
+
     sync = ClipSyncLinux()
     try:
         sync.loop.run_until_complete(sync.main_async())
