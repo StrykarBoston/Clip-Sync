@@ -279,6 +279,11 @@ class ClipSyncEngine:
                     return
 
                 peer_device_id = data.get("deviceId", "unknown")
+                if peer_device_id == self.device_id:
+                    logger.warning(f"Peer {remote_ip} has identical Device ID! (Delete device_id.txt and restart)")
+                    await websocket.close()
+                    return
+
                 logger.info(f"✓ Authenticated peer: {peer_device_id[:8]}... ({remote_ip})")
 
             except asyncio.TimeoutError:
@@ -365,10 +370,12 @@ class ClipSyncEngine:
             ctx.minimum_version = ssl.TLSVersion.TLSv1_2
 
             async with websockets.connect(
-                uri, ssl=ctx, max_size=2 * 1024 * 1024
+                uri, ssl=ctx, max_size=2 * 1024 * 1024, open_timeout=3.0
             ) as websocket:
                 logger.info(f"Connected to peer at {uri}")
                 await self.handle_client(websocket)
+        except asyncio.TimeoutError:
+            logger.error(f"Connection to {uri} timed out (Unreachable/Firewall)")
         except Exception as e:
             logger.error(f"Failed to connect to {uri}: {e}")
 
