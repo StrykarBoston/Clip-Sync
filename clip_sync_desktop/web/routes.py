@@ -71,9 +71,11 @@ def get_settings():
     env_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"
     )
-    secret_key = os.environ.get("SECRET_KEY", "")
-    port = os.environ.get("PORT", "52300")
-    sync_sensitive = os.environ.get("SYNC_SENSITIVE_DATA", "false")
+    import dotenv
+    env_vars = dotenv.dotenv_values(env_path)
+    secret_key = env_vars.get("SECRET_KEY", os.environ.get("SECRET_KEY", ""))
+    port = env_vars.get("PORT", os.environ.get("PORT", "52300"))
+    sync_sensitive = env_vars.get("SYNC_SENSITIVE_DATA", os.environ.get("SYNC_SENSITIVE_DATA", "false"))
 
     masked_key = secret_key[:6] + "•" * 52 + secret_key[-6:] if len(secret_key) >= 12 else "•" * 64
 
@@ -131,7 +133,9 @@ def update_settings():
         if new_key:
             lines.append(f"SECRET_KEY={new_key}")
         else:
-            lines.append(f"SECRET_KEY={os.environ.get('SECRET_KEY', '')}")
+            import dotenv
+            env_vars = dotenv.dotenv_values(env_path)
+            lines.append(f"SECRET_KEY={env_vars.get('SECRET_KEY', os.environ.get('SECRET_KEY', ''))}")
         lines.append(f"PORT={new_port}")
         lines.append(f"SYNC_SENSITIVE_DATA={sync_sensitive}")
         lines.append("")
