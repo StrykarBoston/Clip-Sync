@@ -62,6 +62,32 @@ def get_peers():
     return jsonify({"peers": _engine.get_status()["peers"]})
 
 
+@api.route("/api/peers/add", methods=["POST"])
+@rate_limit
+def add_peer():
+    """Manually connect to a peer by IP."""
+    if not _engine:
+        return jsonify({"error": "Engine not initialized"}), 503
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    ip = data.get("ip", "").strip()
+    port = int(data.get("port", 52300))
+    
+    if not ip:
+        return jsonify({"error": "IP address required"}), 400
+        
+    if _engine.loop:
+        import asyncio
+        asyncio.run_coroutine_threadsafe(
+            _engine.connect_to_peer(ip, port), _engine.loop
+        )
+        return jsonify({"status": "success", "message": f"Connecting to {ip}:{port}..."})
+    return jsonify({"error": "Engine loop not running"}), 500
+
+
 # ── Settings API ─────────────────────────────────────────────────────────
 
 @api.route("/api/settings", methods=["GET"])

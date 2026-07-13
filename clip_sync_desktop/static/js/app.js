@@ -325,3 +325,34 @@ settingsForm.addEventListener('submit', (e) => {
     })
     .catch(err => showToast('Failed to save settings', 'error'));
 });
+
+// ── Manual Peer Connect ────────────────────────────────────────────────
+
+const manualConnectBtn = document.getElementById('btn-manual-connect');
+if (manualConnectBtn) {
+    manualConnectBtn.addEventListener('click', () => {
+        const ipInput = document.getElementById('manual_ip');
+        const ip = ipInput.value.trim();
+        const port = document.getElementById('port').value || 52300;
+        
+        if (!ip) {
+            showToast('Please enter an IP address', 'warning');
+            return;
+        }
+        
+        fetch('/api/peers/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip: ip, port: parseInt(port) })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) showToast(data.error, 'error');
+            else {
+                showToast(data.message, 'success');
+                ipInput.value = '';
+            }
+        })
+        .catch(err => showToast('Failed to connect to peer', 'error'));
+    });
+}

@@ -224,6 +224,21 @@
                             </div>
                         </div>
 
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="manual_ip">Manually Connect to Peer (IP)</label>
+                                <div class="input-with-icon">
+                                    <i data-lucide="monitor"></i>
+                                    <input type="text" id="manual_ip" placeholder="e.g. 192.168.1.5">
+                                </div>
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:flex-end;">
+                                <button type="button" id="btn-manual-connect" class="btn-primary" style="background: var(--success); border-color: var(--success); width: 100%;">
+                                    <i data-lucide="plug"></i> Connect IP
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="form-group">
                             <label>File Save Location</label>
                             <div class="readonly-box" id="save-location">
