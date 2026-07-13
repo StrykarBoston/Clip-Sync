@@ -146,4 +146,4 @@ if __name__ == "__main__":
     
     # Run with Werkzeug server (for local desktop usage, this is fine)
     # Using threading async_mode
-    socketio.run(app, host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    socketio.run(app, host="127.0.0.1", port=5000, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
