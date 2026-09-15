@@ -5,6 +5,7 @@ Auto-detects OS and handles WebSocket server, mDNS, and clipboard text.
 
 import asyncio
 import datetime
+import hashlib
 import ipaddress
 import json
 import logging
