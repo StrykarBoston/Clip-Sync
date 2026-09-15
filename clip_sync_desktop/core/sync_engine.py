@@ -436,8 +436,8 @@ class ClipSyncEngine:
             with open(cert_path, "rb") as f:
                 cert_bytes = f.read()
             return hashlib.sha256(cert_bytes).hexdigest()
-        except Exception:
-            return ""
+        except Exception as e:
+            raise RuntimeError(f"Unable to read TLS certificate {cert_path}: {e}") from e
 
     def _verify_peer_fingerprint(self, device_id: str, cert_fingerprint: str) -> bool:
         pin_file = os.path.join(self.base_dir, "peer_pins.json")
@@ -514,6 +514,11 @@ class ClipSyncEngine:
 
         cert_path = os.path.join(self.base_dir, "tls_cert.pem")
         key_path = os.path.join(self.base_dir, "tls_key.pem")
+
+        if not os.path.isfile(cert_path) or not os.path.isfile(key_path):
+            raise RuntimeError(
+                f"TLS certificate files are missing: {cert_path} and {key_path}"
+            )
 
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
