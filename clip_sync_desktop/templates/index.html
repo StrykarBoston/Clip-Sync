@@ -32,9 +32,6 @@
                 <li class="active" data-section="dashboard">
                     <i data-lucide="layout-dashboard"></i> <span>Dashboard</span>
                 </li>
-                <li data-section="transfers">
-                    <i data-lucide="folder-sync"></i> <span>Transfers</span>
-                </li>
                 <li data-section="security">
                     <i data-lucide="shield-check"></i> <span>Security</span>
                 </li>
@@ -83,13 +80,6 @@
                             <span class="stat-label">Uptime</span>
                         </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-icon"><i data-lucide="arrow-down-to-line"></i></div>
-                        <div class="stat-info">
-                            <span class="stat-value" id="stat-transfers">0</span>
-                            <span class="stat-label">Active Transfers</span>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="dashboard-grid">
@@ -112,42 +102,6 @@
                         <div class="peers-list" id="peers-list">
                             <div class="empty-state">No peers connected</div>
                         </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Transfers Section -->
-            <section id="transfers" class="content-section">
-                <header class="section-header">
-                    <h1>File Transfers</h1>
-                    <p>Drag and drop files to broadcast to all peers</p>
-                </header>
-
-                <div class="upload-zone" id="drop-zone">
-                    <input type="file" id="file-input" multiple hidden>
-                    <i data-lucide="upload-cloud" class="upload-icon"></i>
-                    <h3>Drop files here or click to browse</h3>
-                    <p>Max file size: 100 MB</p>
-                </div>
-
-                <div class="glass-card mt-2">
-                    <div class="card-header">
-                        <h3>Transfer History</h3>
-                    </div>
-                    <div class="table-container">
-                        <table class="transfers-table">
-                            <thead>
-                                <tr>
-                                    <th>Direction</th>
-                                    <th>Filename</th>
-                                    <th>Size</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="transfers-tbody">
-                                <!-- History injected here -->
-                            </tbody>
-                        </table>
                     </div>
                 </div>
             </section>
@@ -236,13 +190,6 @@
                                 <button type="button" id="btn-manual-connect" class="btn-primary" style="background: var(--success); border-color: var(--success); width: 100%;">
                                     <i data-lucide="plug"></i> Connect IP
                                 </button>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label>File Save Location</label>
-                            <div class="readonly-box" id="save-location">
-                                Loading...
                             </div>
                         </div>
 

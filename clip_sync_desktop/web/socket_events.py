@@ -1,5 +1,5 @@
-"""
-ClipSync v3.0 — Flask-SocketIO Event Handlers
+﻿"""
+ClipSync v3.0 â€” Flask-SocketIO Event Handlers
 Real-time event streaming from the sync engine to the web dashboard.
 """
 
@@ -29,7 +29,7 @@ def init_socketio(sio: SocketIO):
         logger.debug("Browser client disconnected from SocketIO")
 
 
-# ── Emit Functions (called from sync engine) ─────────────────────────────
+# â”€â”€ Emit Functions (called from sync engine) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def emit_log(level: str, message: str):
     """Emit a log event to the browser dashboard."""
@@ -47,18 +47,6 @@ def emit_peer_update(peers: list):
         socketio.emit("peer_update", {"peers": peers})
 
 
-def emit_transfer_progress(transfer_id: str, filename: str, progress: float, status: str, direction: str = "receiving"):
-    """Emit file transfer progress."""
-    if socketio:
-        socketio.emit("transfer_progress", {
-            "transfer_id": transfer_id,
-            "filename": filename,
-            "progress": progress,
-            "status": status,
-            "direction": direction,
-        })
-
-
 def emit_clipboard_update(content_type: str, content: str):
     """Emit clipboard update preview."""
     if socketio:
@@ -69,14 +57,13 @@ def emit_clipboard_update(content_type: str, content: str):
         })
 
 
-def emit_stats_update(peers_count: int, syncs_today: int, uptime: int, active_transfers: int):
+def emit_stats_update(peers_count: int, syncs_today: int, uptime: int):
     """Emit dashboard stats update."""
     if socketio:
         socketio.emit("stats_update", {
             "peers_count": peers_count,
             "syncs_today": syncs_today,
             "uptime": uptime,
-            "active_transfers": active_transfers,
         })
 
 
@@ -90,7 +77,7 @@ def emit_security_alert(message: str, severity: str = "warning"):
         })
 
 
-# ── Log Handler (bridges Python logging → SocketIO) ─────────────────────
+# â”€â”€ Log Handler (bridges Python logging â†’ SocketIO) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class SocketIOLogHandler(logging.Handler):
     """
@@ -113,3 +100,4 @@ class SocketIOLogHandler(logging.Handler):
             emit_log(level, message)
         except Exception:
             pass  # Never crash the app due to logging
+

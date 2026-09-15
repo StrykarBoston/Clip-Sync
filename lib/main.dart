@@ -180,17 +180,6 @@ class _HomePageState extends State<HomePage> {
         _updateStatus('Received: $text');
       });
 
-      // 5. Listen for incoming images
-      _syncManager.onImageReceived.listen((imageData) {
-        _updateStatus('Received Image (${imageData['data'].length} bytes)');
-        // NOTE: Flutter clipboard doesn't natively support images without plugins.
-        // For Android/Desktop, the image is saved or handled natively by the engine.
-      });
-
-      // 6. Listen for incoming files
-      _syncManager.onFileReceived.listen((filepath) {
-        _updateStatus('File Saved:\n$filepath');
-      });
     } catch (e) {
       print("Listener Error: $e");
     }

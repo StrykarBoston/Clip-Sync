@@ -73,7 +73,6 @@ def create_app():
     # Wire engine events to SocketIO emitters
     from web.socket_events import (
         emit_peer_update,
-        emit_transfer_progress,
         emit_clipboard_update,
         emit_security_alert,
     )
@@ -85,28 +84,13 @@ def create_app():
     def on_peer_disconnected(device_id: str):
         emit_peer_update(engine.get_status()["peers"])
 
-    def on_transfer_progress(transfer_id: str, progress: float, filename: str):
-        emit_transfer_progress(transfer_id, filename, progress, "receiving")
-
     def on_clipboard_text(text: str):
         increment_sync_count()
         emit_clipboard_update("text", text)
 
-    def on_clipboard_image(image_data: bytes, fmt: str):
-        increment_sync_count()
-        emit_clipboard_update("image", f"[{fmt.upper()} Image Received - {len(image_data)} bytes]")
-
-    def on_file_received(save_path: str, filename: str):
-        increment_sync_count()
-        # The transfer_progress event with 100% will trigger UI updates
-        emit_transfer_progress(str(time.time()), filename, 100.0, "completed")
-
     engine.on_peer_connected = on_peer_connected
     engine.on_peer_disconnected = on_peer_disconnected
-    engine.file_transfer.on_progress = on_transfer_progress
     engine.on_clipboard_text_received = on_clipboard_text
-    engine.on_clipboard_image_received = on_clipboard_image
-    engine.on_file_received = on_file_received
 
     # Override content filter logger to emit security alerts
     class SecurityAlertFilter(logging.Filter):
@@ -129,8 +113,7 @@ def create_app():
             try:
                 peers_count = len(engine.peer_info)
                 uptime = int(time.time() - _start_time)
-                active_transfers = len(engine.file_transfer.active_transfers)
-                emit_stats_update(peers_count, _syncs_today, uptime, active_transfers)
+                emit_stats_update(peers_count, _syncs_today, uptime)
             except Exception:
                 pass
 

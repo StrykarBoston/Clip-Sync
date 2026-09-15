@@ -1,7 +1,6 @@
-"""
-ClipSync v3.0 — Unified P2P Sync Engine
-Replaces both clip_sync_windows/clip_sync.py and clip_sync_linux/clip_sync.py.
-Auto-detects OS and handles WebSocket server, mDNS, clipboard, and file transfers.
+﻿"""
+ClipSync v3.0 - Unified P2P text clipboard sync engine.
+Auto-detects OS and handles WebSocket server, mDNS, and clipboard text.
 """
 
 import asyncio
@@ -29,14 +28,13 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from .security import SecurityManager
 from .clipboard_monitor import ClipboardMonitor
-from .content_filter import is_sensitive_text, sanitize_filename
-from .file_transfer import FileTransferManager
+from .content_filter import is_sensitive_text
 
 logger = logging.getLogger("clipsync.engine")
 
 SERVICE_TYPE = "_clipsync._tcp.local."
 
-# ── Persistent Device ID ─────────────────────────────────────────────────
+# â”€â”€ Persistent Device ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _load_or_create_device_id(base_dir: str) -> str:
     """Load device ID from disk, or create and persist a new one."""
@@ -58,7 +56,7 @@ def _load_or_create_device_id(base_dir: str) -> str:
     return device_id
 
 
-# ── Persistent Nonce Cache ───────────────────────────────────────────────
+# â”€â”€ Persistent Nonce Cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _load_nonce_cache(base_dir: str) -> dict:
     cache_file = os.path.join(base_dir, "nonce_cache.json")
@@ -84,8 +82,8 @@ def _save_nonce_cache(cache: dict, base_dir: str):
 
 class ClipSyncEngine:
     """
-    Unified P2P Clipboard + File Sync Engine.
-    Works on both Windows and Linux — auto-detects platform.
+    Unified P2P clipboard text sync engine.
+    Works on both Windows and Linux â€” auto-detects platform.
     """
 
     def __init__(
@@ -105,7 +103,6 @@ class ClipSyncEngine:
         self.device_id = _load_or_create_device_id(base_dir)
         self.security = SecurityManager(secret_key)
         self.clipboard = ClipboardMonitor()
-        self.file_transfer = FileTransferManager(self.security)
 
         self.zeroconf: Optional[Zeroconf] = None
         self.browser: Optional[ServiceBrowser] = None
@@ -118,29 +115,21 @@ class ClipSyncEngine:
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self._running = False
 
-        # ── Event callbacks (for Flask GUI) ──────────────────────────────
+        # â”€â”€ Event callbacks (for Flask GUI) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         self.on_log: Optional[Callable[[str, str, str], None]] = None  # (level, message, timestamp)
         self.on_peer_connected: Optional[Callable[[str, str], None]] = None  # (device_id, ip)
         self.on_peer_disconnected: Optional[Callable[[str], None]] = None  # (device_id)
         self.on_clipboard_text_received: Optional[Callable[[str], None]] = None
-        self.on_clipboard_image_received: Optional[Callable[[bytes, str], None]] = None
-        self.on_file_received: Optional[Callable[[str, str], None]] = None
 
         # Wire up clipboard monitor callbacks
         self.clipboard.on_text_changed = self._on_local_text_changed
-        self.clipboard.on_image_changed = self._on_local_image_changed
-        self.clipboard.on_files_changed = self._on_local_files_changed
-
-        # Wire up file transfer callbacks
-        self.file_transfer.on_progress = self._on_transfer_progress
-        self.file_transfer.on_file_received = self._on_file_received
 
         # Peer tracking
-        self.peer_info: dict = {}  # device_id → {ip, connected_at, os}
+        self.peer_info: dict = {}  # device_id â†’ {ip, connected_at, os}
 
         logger.info(f"ClipSync Engine initialized (Device: {self.device_id[:8]}..., Port: {port})")
 
-    # ── Local Clipboard Events ───────────────────────────────────────────
+    # â”€â”€ Local Clipboard Events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _on_local_text_changed(self, text: str):
         """Called when local clipboard text changes."""
@@ -151,53 +140,12 @@ class ClipSyncEngine:
         if self.loop:
             asyncio.run_coroutine_threadsafe(self._broadcast_text(text), self.loop)
 
-    def _on_local_image_changed(self, image_data: bytes, fmt: str):
-        """Called when local clipboard image changes."""
-        logger.info(f"Local image copied ({len(image_data)} bytes), broadcasting...")
-        if self.loop:
-            asyncio.run_coroutine_threadsafe(
-                self._broadcast_image(image_data, fmt), self.loop
-            )
-
-    def _on_local_files_changed(self, files: list[str]):
-        """Called when files are copied to clipboard."""
-        for filepath in files:
-            logger.info(f"Local file copied, broadcasting: {os.path.basename(filepath)}")
-            if self.loop:
-                asyncio.run_coroutine_threadsafe(
-                    self._broadcast_file(filepath), self.loop
-                )
-
-    def _on_transfer_progress(self, transfer_id: str, progress: float, filename: str):
-        """Called during file transfer progress."""
-        logger.debug(f"Transfer {filename}: {progress:.1f}%")
-
-    def _on_file_received(self, save_path: str, filename: str):
-        """Called when a file transfer completes."""
-        if self.on_file_received:
-            self.on_file_received(save_path, filename)
-
-    # ── Broadcasting ─────────────────────────────────────────────────────
+    # â”€â”€ Broadcasting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _broadcast_text(self, text: str):
         """Broadcast text clipboard to all connected peers."""
         msg = self.security.encrypt_message({"type": "clipboard", "text": text})
         await self._broadcast_raw(msg)
-
-    async def _broadcast_image(self, image_data: bytes, fmt: str):
-        """Broadcast clipboard image to all connected peers."""
-        image_msg = self.file_transfer.create_image_message(image_data, fmt)
-        encrypted = self.security.encrypt_message(image_msg)
-        await self._broadcast_raw(encrypted)
-
-    async def _broadcast_file(self, filepath: str):
-        """Broadcast a file to all connected peers (chunked)."""
-        for msg_dict in self.file_transfer.create_send_messages(filepath):
-            encrypted = self.security.encrypt_message(msg_dict)
-            await self._broadcast_raw(encrypted)
-            # Small delay between chunks to avoid flooding
-            if msg_dict.get("type") == "file_chunk":
-                await asyncio.sleep(0.01)
 
     async def _broadcast_raw(self, encrypted_message: str):
         """Send an encrypted message to all active WebSocket peers."""
@@ -206,14 +154,7 @@ class ClipSyncEngine:
         tasks = [ws.send(encrypted_message) for ws in self.active_websockets.copy()]
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    # ── Send a file manually via API ─────────────────────────────────────
-
-    def send_file(self, filepath: str):
-        """Public method to send a file (called from Flask)."""
-        if self.loop:
-            asyncio.run_coroutine_threadsafe(self._broadcast_file(filepath), self.loop)
-
-    # ── WebSocket Connection Handler ─────────────────────────────────────
+    # â”€â”€ WebSocket Connection Handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def handle_client(self, websocket):
         """Handle an incoming or outgoing WebSocket connection."""
@@ -235,13 +176,13 @@ class ClipSyncEngine:
         self._connections_per_ip[remote_ip] += 1
 
         try:
-            # Send our hello
             hello = {
                 "type": "hello",
                 "deviceId": self.device_id,
                 "timestamp": int(time.time()),
                 "nonce": str(uuid.uuid4()),
                 "fingerprint": self.security.compute_network_challenge(),
+                "cert_fingerprint": self._local_cert_fingerprint(),
             }
             await websocket.send(self.security.encrypt_message(hello))
 
@@ -284,13 +225,23 @@ class ClipSyncEngine:
                     await websocket.close()
                     return
 
-                logger.info(f"✓ Authenticated peer: {peer_device_id[:8]}... ({remote_ip})")
+                peer_cert = data.get("cert_fingerprint")
+                if not peer_cert:
+                    logger.warning(f"Peer {remote_ip} failed auth: missing certificate fingerprint")
+                    await websocket.close()
+                    return
+                if not self._verify_peer_fingerprint(peer_device_id, peer_cert):
+                    logger.warning(f"Peer {remote_ip} failed auth: untrusted certificate fingerprint")
+                    await websocket.close()
+                    return
+
+                logger.info(f"âœ“ Authenticated peer: {peer_device_id[:8]}... ({remote_ip})")
 
             except asyncio.TimeoutError:
                 logger.warning(f"Peer {remote_ip} auth handshake timed out")
                 return
 
-            # Auth passed — add to broadcast pool
+            # Auth passed â€” add to broadcast pool
             authenticated = True
             self.active_websockets.add(websocket)
             self.peer_info[peer_device_id] = {
@@ -317,22 +268,9 @@ class ClipSyncEngine:
                         if self.on_clipboard_text_received:
                             self.on_clipboard_text_received(text)
 
-                elif msg_type == "clipboard_image":
-                    image_data = self.file_transfer.handle_clipboard_image(data)
-                    if image_data:
-                        logger.info(f"Received image from peer ({len(image_data)} bytes)")
-                        self.clipboard.set_clipboard_image(image_data)
-                        if self.on_clipboard_image_received:
-                            self.on_clipboard_image_received(image_data, data.get("format", "png"))
-
-                elif msg_type == "file_start":
-                    self.file_transfer.handle_file_start(data)
-
-                elif msg_type == "file_chunk":
-                    self.file_transfer.handle_file_chunk(data)
-
-                elif msg_type == "file_complete":
-                    self.file_transfer.handle_file_complete(data)
+                else:
+                    logger.warning(f"Rejected unsupported message type from {remote_ip}: {msg_type}")
+                    continue
 
         except websockets.exceptions.ConnectionClosed:
             pass
@@ -358,7 +296,7 @@ class ClipSyncEngine:
             del self.seen_nonces[n]
         _save_nonce_cache(self.seen_nonces, self.base_dir)
 
-    # ── Peer Discovery (mDNS) ───────────────────────────────────────────
+    # â”€â”€ Peer Discovery (mDNS) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def connect_to_peer(self, host: str, port: int):
         """Connect to a discovered peer via WSS."""
@@ -370,7 +308,7 @@ class ClipSyncEngine:
             ctx.minimum_version = ssl.TLSVersion.TLSv1_2
 
             async with websockets.connect(
-                uri, ssl=ctx, max_size=2 * 1024 * 1024, open_timeout=3.0
+                uri, ssl=ctx, max_size=256 * 1024, open_timeout=3.0
             ) as websocket:
                 logger.info(f"Connected to peer at {uri}")
                 await self.handle_client(websocket)
@@ -400,7 +338,7 @@ class ClipSyncEngine:
     def update_service(self, zeroconf, type, name):
         pass
 
-    # ── TLS Certificate Management ───────────────────────────────────────
+    # â”€â”€ TLS Certificate Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _ensure_cert_matches_ip(self):
         """Regenerate TLS cert if the local IP doesn't match the SAN."""
@@ -478,7 +416,7 @@ class ClipSyncEngine:
             )
         logger.info(f"TLS certificate generated (RSA-4096, 1-year validity, SAN: {local_ip})")
 
-    # ── Utilities ────────────────────────────────────────────────────────
+    # â”€â”€ Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _get_local_ip(self) -> str:
         try:
@@ -489,6 +427,36 @@ class ClipSyncEngine:
             return ip
         except Exception:
             return "127.0.0.1"
+
+    def _local_cert_fingerprint(self) -> str:
+        cert_path = os.path.join(self.base_dir, "tls_cert.pem")
+        if not os.path.exists(cert_path):
+            self._ensure_cert_matches_ip()
+        try:
+            with open(cert_path, "rb") as f:
+                cert_bytes = f.read()
+            return hashlib.sha256(cert_bytes).hexdigest()
+        except Exception:
+            return ""
+
+    def _verify_peer_fingerprint(self, device_id: str, cert_fingerprint: str) -> bool:
+        pin_file = os.path.join(self.base_dir, "peer_pins.json")
+        pins = {}
+        try:
+            if os.path.exists(pin_file):
+                with open(pin_file, "r", encoding="utf-8") as f:
+                    pins = json.load(f)
+        except Exception:
+            pins = {}
+        if device_id in pins and pins[device_id] != cert_fingerprint:
+            return False
+        pins[device_id] = cert_fingerprint
+        try:
+            with open(pin_file, "w", encoding="utf-8") as f:
+                json.dump(pins, f)
+        except Exception:
+            pass
+        return True
 
     def get_status(self) -> dict:
         """Get current engine status (for API/GUI)."""
@@ -506,11 +474,10 @@ class ClipSyncEngine:
                 }
                 for did, info in self.peer_info.items()
             ],
-            "active_transfers": len(self.file_transfer.active_transfers),
             "platform": sys.platform,
         }
 
-    # ── Main Run Loop ────────────────────────────────────────────────────
+    # â”€â”€ Main Run Loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def start_mDNS(self):
         local_ip = self._get_local_ip()
@@ -528,7 +495,7 @@ class ClipSyncEngine:
         logger.info(f"mDNS registered on {local_ip}:{self.port}")
 
     async def run(self):
-        """Main async entry point — starts all services."""
+        """Main async entry point â€” starts all services."""
         self._running = True
         self.loop = asyncio.get_event_loop()
 
@@ -560,7 +527,7 @@ class ClipSyncEngine:
             "0.0.0.0",
             self.port,
             ssl=ssl_context,
-            max_size=2 * 1024 * 1024,  # 2MB max for chunked transfers
+            max_size=256 * 1024,
             server_header=None,
         ):
             await asyncio.Future()  # Run forever
@@ -586,3 +553,4 @@ class ClipSyncEngine:
         thread = threading.Thread(target=_thread_target, daemon=True)
         thread.start()
         return thread
+

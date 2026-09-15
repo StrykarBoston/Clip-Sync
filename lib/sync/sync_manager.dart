@@ -6,19 +6,13 @@ import 'package:uuid/uuid.dart';
 import 'package:clip_sync/sync/security_manager.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:clip_sync/sync/file_transfer_manager.dart';
 import 'package:cryptography/cryptography.dart';
 import 'dart:math';
 
 class SyncManager {
   static final SyncManager _instance = SyncManager._internal();
   factory SyncManager() => _instance;
-  SyncManager._internal() {
-    _fileManager = FileTransferManager();
-    _fileManager.onFileSaved = (path) {
-      _fileStreamController.add(path);
-    };
-  }
+  SyncManager._internal();
 
   final String deviceId = const Uuid().v4();
 
@@ -31,18 +25,9 @@ class SyncManager {
   final _clipboardStreamController = StreamController<String>.broadcast();
   Stream<String> get onClipboardReceived => _clipboardStreamController.stream;
 
-  final _imageStreamController = StreamController<Map<String, dynamic>>.broadcast();
-  Stream<Map<String, dynamic>> get onImageReceived => _imageStreamController.stream;
-
-  final _fileStreamController = StreamController<String>.broadcast();
-  Stream<String> get onFileReceived => _fileStreamController.stream;
-
   final Set<String> _connectedPeers = {};
   final Map<String, int> _seenNonces = {}; // {nonce: epoch_seconds} for TTL-based eviction
   final SecurityManager _securityManager = SecurityManager();
-  
-  // File Transfer
-  late final FileTransferManager _fileManager;
 
   // --- VULN-004 FIX: Per-IP connection tracking ---
   final Map<String, int> _connectionsPerIp = {};
@@ -226,21 +211,6 @@ class SyncManager {
             if (!isAuthenticated) return;
             final text = message['text'];
             _clipboardStreamController.add(text);
-          } else if (message['type'] == 'clipboard_image') {
-            if (!isAuthenticated) return;
-            _imageStreamController.add({
-              'data': base64Decode(message['data']),
-              'format': message['format'],
-            });
-          } else if (message['type'] == 'file_start') {
-            if (!isAuthenticated) return;
-            await _fileManager.handleFileStart(message);
-          } else if (message['type'] == 'file_chunk') {
-            if (!isAuthenticated) return;
-            await _fileManager.handleFileChunk(message);
-          } else if (message['type'] == 'file_complete') {
-            if (!isAuthenticated) return;
-            await _fileManager.handleFileComplete(message);
           }
         } catch (e) {
           print('Invalid message: $e');

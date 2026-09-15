@@ -8,7 +8,6 @@ import os
 import time
 
 from flask import Blueprint, jsonify, request, render_template
-from werkzeug.utils import secure_filename
 
 from .flask_security import rate_limit, sanitize_input
 
@@ -105,17 +104,10 @@ def get_settings():
 
     masked_key = secret_key[:6] + "•" * 52 + secret_key[-6:] if len(secret_key) >= 12 else "•" * 64
 
-    import sys
-    if sys.platform == "win32":
-        save_location = os.path.join(os.path.expanduser("~"), "Downloads", "ClipSync")
-    else:
-        save_location = os.path.join(os.path.expanduser("~"), "Documents", "ClipSync")
-
     return jsonify({
         "secret_key_masked": masked_key,
         "port": port,
         "sync_sensitive_data": sync_sensitive,
-        "save_location": save_location,
     })
 
 
@@ -179,59 +171,6 @@ def update_settings():
         return jsonify({"error": "Failed to save settings"}), 500
 
 
-# ── Transfers API ────────────────────────────────────────────────────────
-
-@api.route("/api/transfers")
-@rate_limit
-def get_transfers():
-    """Get transfer history."""
-    if not _engine:
-        return jsonify({"transfers": []})
-    return jsonify({
-        "transfers": _engine.file_transfer.get_transfer_history()
-    })
-
-
-@api.route("/api/send-file", methods=["POST"])
-@rate_limit
-def send_file():
-    """Upload and broadcast a file to all peers."""
-    if not _engine:
-        return jsonify({"error": "Engine not initialized"}), 503
-
-    if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"error": "No file selected"}), 400
-
-    filename = secure_filename(file.filename)
-    if not filename:
-        return jsonify({"error": "Invalid filename"}), 400
-
-    # Save to temp location
-    import tempfile
-    temp_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "temp_uploads",
-    )
-    os.makedirs(temp_dir, exist_ok=True)
-    temp_path = os.path.join(temp_dir, filename)
-
-    try:
-        file.save(temp_path)
-        _engine.send_file(temp_path)
-        logger.info(f"File queued for broadcast: {filename}")
-        return jsonify({
-            "status": "success",
-            "message": f"File '{filename}' is being sent to all peers.",
-        })
-    except Exception as e:
-        logger.error(f"Failed to send file: {e}")
-        return jsonify({"error": "Failed to send file"}), 500
-
-
 # ── Security API ─────────────────────────────────────────────────────────
 
 @api.route("/api/security")
@@ -242,31 +181,28 @@ def get_security_info():
     return jsonify({
         "tls": cert_info,
         "owasp_compliance": {
-            "A01_access_control": {"status": "pass", "detail": "Localhost-only binding + CSRF + rate limiting"},
-            "A02_misconfiguration": {"status": "pass", "detail": "Debug disabled, secure defaults enforced"},
-            "A03_supply_chain": {"status": "pass", "detail": "Pinned dependency versions"},
-            "A04_cryptographic": {"status": "pass", "detail": "AES-256-GCM + HKDF + RSA-4096 TLS"},
-            "A05_injection": {"status": "pass", "detail": "Input sanitization, filename validation, CSP headers"},
-            "A06_insecure_design": {"status": "pass", "detail": "File type blocklist, magic-byte MIME check, size limits"},
-            "A07_auth_failures": {"status": "pass", "detail": "HMAC challenge + 30s timestamp + nonce cache"},
-            "A08_integrity": {"status": "pass", "detail": "SHA-256 hash verification on all file transfers"},
+            "A01_access_control": {"status": "pass", "detail": "Localhost binding + strict rate limiting + no public exposure"},
+            "A02_misconfiguration": {"status": "pass", "detail": "Debug disabled and secure defaults enforced"},
+            "A03_supply_chain": {"status": "pass", "detail": "Pinned runtime dependencies and minimal package set"},
+            "A04_cryptographic": {"status": "pass", "detail": "AES-256-GCM + HKDF + TLS 1.2+ transport protection"},
+            "A05_injection": {"status": "pass", "detail": "Input sanitization and text-only message handling"},
+            "A06_insecure_design": {"status": "pass", "detail": "Text-only design minimizes attack surface"},
+            "A07_auth_failures": {"status": "pass", "detail": "HMAC challenge + timestamp + nonce cache"},
+            "A08_integrity": {"status": "pass", "detail": "Encrypted payload integrity verified via AEAD"},
             "A09_logging": {"status": "pass", "detail": "Structured security event logging"},
-            "A10_exceptions": {"status": "pass", "detail": "Global error handler, no stack traces exposed"},
+            "A10_exceptions": {"status": "pass", "detail": "Global error handling without stack traces"},
         },
         "active_protections": [
             "AES-256-GCM End-to-End Encryption",
             "HKDF Key Derivation (SHA-256)",
-            "HMAC-SHA256 Network Challenge (5-min windows)",
-            "Rolling Nonce Cache (60s TTL)",
+            "HMAC-SHA256 Network Challenge",
+            "Nonce cache with TTL eviction",
             "TLS 1.2+ Transport Encryption",
-            "RSA-4096 Self-Signed Certificates",
-            "Dynamic IP SAN Auto-Regeneration",
-            "Per-IP Connection Rate Limiting (5/IP)",
-            "Content Security Policy (CSP) Headers",
-            "Sensitive Data Detection & Blocking",
-            "Executable File Type Blocklist",
-            "SHA-256 File Integrity Verification",
-            "Filename Sanitization (Path Traversal Prevention)",
+            "Local-only LAN trust model",
+            "Per-IP connection rate limiting",
+            "Sensitive text data filtering",
+            "CSP security headers",
+            "Clipboard text sanitization",
         ],
     })
 

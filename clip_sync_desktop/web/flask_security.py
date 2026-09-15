@@ -26,7 +26,7 @@ def init_security(app: Flask):
         SESSION_COOKIE_SAMESITE="Strict",
         SESSION_COOKIE_SECURE=False,  # Localhost only, no HTTPS needed
         PERMANENT_SESSION_LIFETIME=3600,  # 1 hour
-        MAX_CONTENT_LENGTH=110 * 1024 * 1024,  # 110 MB (for file uploads)
+        MAX_CONTENT_LENGTH=256 * 1024,
     )
 
     # Ensure strong random secret key for Flask sessions
@@ -72,7 +72,7 @@ def init_security(app: Flask):
 
     @app.errorhandler(413)
     def too_large(e):
-        return jsonify({"error": "File too large (max 100 MB)"}), 413
+        return jsonify({"error": "Request too large"}), 413
 
     @app.errorhandler(429)
     def rate_limited(e):

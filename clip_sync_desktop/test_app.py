@@ -15,7 +15,6 @@ endpoints = [
     "/",
     "/api/status",
     "/api/settings",
-    "/api/transfers",
     "/api/security",
     "/api/peers"
 ]

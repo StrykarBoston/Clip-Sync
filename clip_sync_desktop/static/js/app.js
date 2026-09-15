@@ -10,9 +10,6 @@ const sections = document.querySelectorAll('.content-section');
 const logConsole = document.getElementById('log-console');
 const clearConsoleBtn = document.getElementById('clear-console');
 const peersList = document.getElementById('peers-list');
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-const transfersTbody = document.getElementById('transfers-tbody');
 const toastContainer = document.getElementById('toast-container');
 const settingsForm = document.getElementById('settings-form');
 const toggleKeyVisBtn = document.getElementById('toggle-key-vis');
@@ -127,108 +124,11 @@ socket.on('stats_update', (data) => {
     document.getElementById('stat-uptime').innerText = 
         h > 0 ? `${h}h ${m}m` : (m > 0 ? `${m}m ${s}s` : `${s}s`);
         
-    document.getElementById('stat-transfers').innerText = data.active_transfers;
 });
 
 socket.on('security_alert', (data) => {
     showToast(`Security: ${data.message}`, data.severity);
 });
-
-socket.on('transfer_progress', (data) => {
-    // Check if row exists
-    let row = document.getElementById(`transfer-${data.transfer_id}`);
-    
-    if (!row) {
-        // Create new row
-        row = document.createElement('tr');
-        row.id = `transfer-${data.transfer_id}`;
-        row.innerHTML = `
-            <td>
-                <span style="display:flex;align-items:center;gap:4px">
-                    <i data-lucide="${data.direction === 'receiving' ? 'arrow-down' : 'arrow-up'}"></i>
-                    ${data.direction}
-                </span>
-            </td>
-            <td>${data.filename}</td>
-            <td>-</td>
-            <td>
-                <div style="font-size: 12px; margin-bottom:4px">${data.status} (<span class="pct">${Math.round(data.progress)}%</span>)</div>
-                <div class="progress-bar-container">
-                    <div class="progress-bar-fill" style="width: ${data.progress}%"></div>
-                </div>
-            </td>
-        `;
-        transfersTbody.prepend(row);
-        lucide.createIcons();
-    } else {
-        // Update existing
-        row.querySelector('.progress-bar-fill').style.width = `${data.progress}%`;
-        row.querySelector('.pct').innerText = `${Math.round(data.progress)}%`;
-        if (data.status === 'completed') {
-            row.querySelector('.progress-bar-fill').style.background = 'var(--success)';
-        }
-    }
-});
-
-// ── File Upload ────────────────────────────────────────────────────────
-
-dropZone.addEventListener('click', () => fileInput.click());
-
-['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-    dropZone.addEventListener(eventName, preventDefaults, false);
-});
-
-function preventDefaults (e) {
-    e.preventDefault();
-    e.stopPropagation();
-}
-
-['dragenter', 'dragover'].forEach(eventName => {
-    dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
-});
-
-['dragleave', 'drop'].forEach(eventName => {
-    dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
-});
-
-dropZone.addEventListener('drop', (e) => {
-    const files = e.dataTransfer.files;
-    handleFiles(files);
-});
-
-fileInput.addEventListener('change', function() {
-    handleFiles(this.files);
-});
-
-function handleFiles(files) {
-    if (files.length === 0) return;
-    
-    // Only upload first file for now
-    const file = files[0];
-    
-    // Max 100MB
-    if (file.size > 100 * 1024 * 1024) {
-        showToast('File too large (Max 100MB)', 'error');
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    showToast(`Preparing to send ${file.name}...`, 'info');
-    
-    fetch('/api/send-file', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) showToast(data.error, 'error');
-        else showToast(data.message, 'success');
-    })
-    .catch(err => showToast('Failed to upload file', 'error'));
-}
-
 
 // ── Fetch Initial Data ─────────────────────────────────────────────────
 
@@ -240,7 +140,6 @@ function fetchInitialData() {
             document.getElementById('current-key-hint').innerText = `Current: ${data.secret_key_masked}`;
             document.getElementById('port').value = data.port;
             document.getElementById('sync_sensitive').value = data.sync_sensitive_data;
-            document.getElementById('save-location').innerText = data.save_location;
         });
         
     // Security info
@@ -270,30 +169,6 @@ function fetchInitialData() {
             lucide.createIcons();
         });
         
-    // Transfers
-    fetch('/api/transfers')
-        .then(res => res.json())
-        .then(data => {
-            transfersTbody.innerHTML = data.transfers.map(t => `
-                <tr id="transfer-${t.transfer_id}">
-                    <td>
-                        <span style="display:flex;align-items:center;gap:4px">
-                            <i data-lucide="${t.direction === 'receiving' ? 'arrow-down' : 'arrow-up'}"></i>
-                            ${t.direction}
-                        </span>
-                    </td>
-                    <td>${t.filename}</td>
-                    <td>${(t.size / 1024).toFixed(1)} KB</td>
-                    <td>
-                        <div style="font-size: 12px; margin-bottom:4px">completed (<span class="pct">100%</span>)</div>
-                        <div class="progress-bar-container">
-                            <div class="progress-bar-fill" style="width: 100%; background: var(--success)"></div>
-                        </div>
-                    </td>
-                </tr>
-            `).join('');
-            lucide.createIcons();
-        });
 }
 
 // ── Settings Submit ────────────────────────────────────────────────────
