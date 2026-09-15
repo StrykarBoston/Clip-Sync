@@ -480,33 +480,37 @@ class ClipSyncEngine:
     # â”€â”€ Main Run Loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def start_mDNS(self):
-        local_ip = self._get_local_ip()
-        self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
-        info = ServiceInfo(
-            SERVICE_TYPE,
-            f"ClipSync-{self.device_id[:4]}.{SERVICE_TYPE}",
-            addresses=[socket.inet_aton(local_ip)],
-            port=self.port,
-            properties={},
-            server="clipsync-node.local.",
-        )
-        self.zeroconf.register_service(info)
-        self.browser = ServiceBrowser(self.zeroconf, SERVICE_TYPE, self)
-        logger.info(f"mDNS registered on {local_ip}:{self.port}")
+        try:
+            local_ip = self._get_local_ip()
+            self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+            info = ServiceInfo(
+                SERVICE_TYPE,
+                f"ClipSync-{self.device_id[:4]}.{SERVICE_TYPE}",
+                addresses=[socket.inet_aton(local_ip)],
+                port=self.port,
+                properties={},
+                server="clipsync-node.local.",
+            )
+            self.zeroconf.register_service(info)
+            self.browser = ServiceBrowser(self.zeroconf, SERVICE_TYPE, self)
+            logger.info(f"mDNS registered on {local_ip}:{self.port}")
+        except Exception:
+            logger.exception("mDNS startup failed; continuing with manual peer connections")
 
     async def run(self):
         """Main async entry point â€” starts all services."""
         self._running = True
         self.loop = asyncio.get_event_loop()
 
+        # Generate the local certificate before starting discovery or the server.
+        # This makes first-run setup deterministic on a new machine.
+        self._ensure_cert_matches_ip()
+
         # Start mDNS
         self.start_mDNS()
 
         # Start clipboard monitor
         self.clipboard.start()
-
-        # Ensure TLS certs match current IP
-        self._ensure_cert_matches_ip()
 
         cert_path = os.path.join(self.base_dir, "tls_cert.pem")
         key_path = os.path.join(self.base_dir, "tls_key.pem")
@@ -548,7 +552,8 @@ class ClipSyncEngine:
             try:
                 self.loop.run_until_complete(self.run())
             except Exception as e:
-                logger.error(f"Engine thread error: {e}")
+                logger.exception("Engine thread error: %s", e)
+                logger.error("Engine startup exception type: %r", type(e))
 
         thread = threading.Thread(target=_thread_target, daemon=True)
         thread.start()
