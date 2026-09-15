@@ -506,8 +506,8 @@ class ClipSyncEngine:
         # This makes first-run setup deterministic on a new machine.
         self._ensure_cert_matches_ip()
 
-        # Start mDNS
-        self.start_mDNS()
+        # Zeroconf registration is a blocking API; keep it off the asyncio loop.
+        await asyncio.to_thread(self.start_mDNS)
 
         # Start clipboard monitor
         self.clipboard.start()
